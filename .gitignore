@@ -1,0 +1,3 @@
+nstock-server
+*.test
+.DS_Store
