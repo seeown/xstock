@@ -33,7 +33,7 @@
   </style>
 </head>
 <body>
-  <header><h1>NStock <span>N字战法筛选与回测</span></h1><div class="tag">日线研究工具 · 演示数据</div></header>
+  <header><h1>NStock <span>N字战法筛选与回测</span></h1><div class="tag">日线研究工具 · 通达信真实数据</div></header>
   <main>
     <div class="layout">
       <aside class="panel params">
@@ -52,7 +52,7 @@
         <button class="run" id="run">运行回测</button><p class="hint">信号在收盘后生成，按下一交易日开盘价模拟成交。</p>
       </aside>
       <section>
-        <div class="symbol"><label for="symbol">股票代码</label><input id="symbol" value="DEMO" autocomplete="off"><button id="loadSignals">查看信号</button></div>
+        <div class="symbol"><label for="symbol">股票代码</label><input id="symbol" value="DEMO" placeholder="600519.SH" autocomplete="off"><button id="sync">同步真实数据</button><button id="loadSignals">查看信号</button></div>
         <p id="message" aria-live="polite">已加载 DEMO 演示标的。你可以修改策略参数后运行回测。</p>
         <div class="metrics">
           <div class="metric"><small>总收益</small><strong id="totalReturn">—</strong></div>
@@ -81,9 +81,10 @@
     async function barsFor(symbol){ const res=await fetch(`/api/stocks/${encodeURIComponent(symbol)}/bars`); const data=await res.json(); if(!res.ok) throw Error(data.error||'行情加载失败'); latestBars=data; }
     async function run(){ const symbol=$('symbol').value.trim().toUpperCase(); if(!symbol){message('请输入股票代码。',true);return;} const btn=$('run'); btn.disabled=true; message('正在运行回测…'); try { const [res]=await Promise.all([fetch(`/api/backtests/${encodeURIComponent(symbol)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({initialCash:100000,params:params()})}),barsFor(symbol)]); const data=await res.json(); if(!res.ok) throw Error(data.error||'回测失败'); renderMetrics(data.metrics); renderSignals(data.signals); renderTrades(data.trades); message(`回测完成：${symbol} 共发现 ${data.signals.length} 个 N 字信号。`); } catch(e) { message(e.message+' 请先通过行情导入 API 添加该股票日线。',true); } finally { btn.disabled=false; } }
     async function loadSignals(){ const symbol=$('symbol').value.trim().toUpperCase(); try { const [res]=await Promise.all([fetch(`/api/stocks/${encodeURIComponent(symbol)}/signals`),barsFor(symbol)]); const data=await res.json(); if(!res.ok) throw Error(data.error||'加载失败'); renderSignals(data); message(`${symbol} 已加载 ${data.length} 个默认参数信号。`); } catch(e) { message(e.message+' 请使用 DEMO 或导入行情。',true); } }
+    async function sync(){ const symbol=$('symbol').value.trim().toUpperCase(); if(!symbol){message('请输入股票代码。',true);return;} if(symbol==='DEMO'){message('DEMO 是内置演示数据；请输入真实代码，例如 600519.SH。',true);return;} const btn=$('sync'); btn.disabled=true; message(`正在从通达信拉取 ${symbol} 前复权日线（全量，可能需要几秒）…`); try { const res=await fetch(`/api/sync/${encodeURIComponent(symbol)}`,{method:'POST'}); const data=await res.json(); if(!res.ok) throw Error(data.error||'同步失败'); message(`同步完成：${symbol} 共 ${data.count} 根日线（${data.firstDate} 至 ${data.lastDate}），正在运行回测…`); await run(); } catch(e) { message(e.message,true); } finally { btn.disabled=false; } }
     function renderChart(){ const host=$('chart'), bars=latestBars; if(!bars.length){host.innerHTML='';return;} const width=Math.max(host.clientWidth,280), height=250, pad={l:42,r:16,t:16,b:28}; const base=bars.map(b=>b.Close), count=base.length; const min=Math.min(...base)*.97,max=Math.max(...base)*1.03; const x=i=>pad.l+i*(width-pad.l-pad.r)/Math.max(count-1,1), y=v=>pad.t+(max-v)*(height-pad.t-pad.b)/(max-min); const path=base.map((v,i)=>`${i?'L':'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' '); const indexForDate=d=>bars.findIndex(b=>b.Date===d); const markers=latestSignals.map(s=>{const i=indexForDate(s.Date);return i<0?'':`<circle class="signal" cx="${x(i)}" cy="${y(base[i])}" r="5"><title>${s.Date} N字信号</title></circle>`}).join('')+latestTrades.map(t=>{const i=indexForDate(t.BuyDate);return i<0?'':`<path class="trade" d="M${x(i)},${y(base[i])-8} l5,8 h-10 z"><title>${t.BuyDate} 模拟买入</title></path>`}).join(''); host.innerHTML=`<svg viewBox="0 0 ${width} ${height}" role="img"><title>收盘价及策略信号</title><line class="axis" x1="${pad.l}" x2="${width-pad.r}" y1="${height-pad.b}" y2="${height-pad.b}"/><line class="axis" x1="${pad.l}" x2="${pad.l}" y1="${pad.t}" y2="${height-pad.b}"/><text x="4" y="${pad.t+4}" fill="#65717c" font-size="11">${max.toFixed(1)}</text><text x="4" y="${height-pad.b}" fill="#65717c" font-size="11">${min.toFixed(1)}</text><text x="${pad.l}" y="${height-8}" fill="#65717c" font-size="11">${bars[0].Date.slice(5)}</text><text x="${width-pad.r-34}" y="${height-8}" fill="#65717c" font-size="11">${bars.at(-1).Date.slice(5)}</text><path class="close-line" d="${path}"/>${markers}</svg>`; $('chartRange').textContent=`${bars[0].Date} 至 ${bars.at(-1).Date}`; }
     async function init(){ try { const p=await (await fetch('/api/params/default')).json(); fillParams(p); await run(); } catch(e) { message('无法连接后端服务。',true); } }
-    $('run').addEventListener('click',run); $('loadSignals').addEventListener('click',loadSignals); window.addEventListener('resize',renderChart); init();
+    $('run').addEventListener('click',run); $('sync').addEventListener('click',sync); $('loadSignals').addEventListener('click',loadSignals); window.addEventListener('resize',renderChart); init();
   </script>
 </body>
 </html>
