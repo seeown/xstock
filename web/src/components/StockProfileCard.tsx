@@ -63,6 +63,7 @@ export default function StockProfileCard({ symbol }: { symbol: string }) {
         <div className="profile-body">
           <div className="profile-head">
             <span className="profile-name">{profile.name || profile.symbol}</span>
+            {profile.board && <span className="concept-chip board-chip">{profile.board}</span>}
             <span className="profile-meta">
               {profile.industry && <span>{profile.industry}</span>}
               {profile.listDate && <span>上市 {profile.listDate}</span>}

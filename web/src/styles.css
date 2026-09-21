@@ -531,3 +531,5 @@ td.num, th.num { text-align: right; }
   border-radius: 10px;
   padding: 12px 14px;
 }
+
+.board-chip { background: rgba(245, 181, 68, 0.12); color: #f5c56b; }

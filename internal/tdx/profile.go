@@ -25,7 +25,8 @@ const conceptTTL = time.Hour
 type StockProfile struct {
 	Name     string
 	Industry string
-	Market   string // SH / SZ
+	Market   string // SH / SZ / BJ
+	Board    string // 上证主板 / 科创板 / 深证主板 / 创业板 / 北交所
 	ListDate string // YYYY-MM-DD, empty if unknown
 	Business string
 	Concepts []string
@@ -55,8 +56,8 @@ func (c *Client) FetchProfile(symbol string) (*StockProfile, error) {
 	if err != nil {
 		return nil, err
 	}
-	if mkt != types.MarketSH && mkt != types.MarketSZ {
-		return nil, fmt.Errorf("仅支持沪市(.SH)或深市(.SZ)股票，例如 600519.SH")
+	if mkt != types.MarketSH && mkt != types.MarketSZ && mkt != types.MarketBJ {
+		return nil, fmt.Errorf("仅支持沪深北股票，例如 600519.SH")
 	}
 
 	c.mu.Lock()
@@ -74,10 +75,7 @@ func (c *Client) FetchProfile(symbol string) (*StockProfile, error) {
 		return nil, fmt.Errorf("通达信F10拉取失败: %w", err)
 	}
 
-	p := &StockProfile{Market: "SZ"}
-	if mkt == types.MarketSH {
-		p.Market = "SH"
-	}
+	p := &StockProfile{Market: mkt.String(), Board: BoardOf(mkt.String(), code)}
 	overview := sectionByName(bundle.Sections, "公司概况")
 	p.Name = firstField(overview, nameRe)
 	p.Industry = firstField(overview, industryRe)

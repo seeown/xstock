@@ -37,6 +37,7 @@ type Profile struct {
 	Name      string   `json:"name"`
 	Industry  string   `json:"industry"`
 	Market    string   `json:"market"`
+	Board     string   `json:"board"`
 	ListDate  string   `json:"listDate"`
 	Business  string   `json:"business"`
 	Concepts  []string `json:"concepts"`
@@ -69,12 +70,18 @@ func Open(ctx context.Context, dsn string) (*Store, error) {
 		name       TEXT NOT NULL DEFAULT '',
 		industry   TEXT NOT NULL DEFAULT '',
 		market     TEXT NOT NULL DEFAULT '',
+		board      TEXT NOT NULL DEFAULT '',
 		list_date  TEXT NOT NULL DEFAULT '',
 		business   TEXT NOT NULL DEFAULT '',
 		updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 	)`); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("create stock_profile table: %w", err)
+	}
+	// Earlier deployments created the table without the board column.
+	if _, err := db.ExecContext(ctx, `ALTER TABLE stock_profile ADD COLUMN IF NOT EXISTS board TEXT NOT NULL DEFAULT ''`); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("add board column: %w", err)
 	}
 	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS stock_concept (
 		symbol  TEXT NOT NULL,
@@ -115,14 +122,14 @@ func (s *Store) loadAll(ctx context.Context) error {
 }
 
 func (s *Store) loadProfiles(ctx context.Context) error {
-	rows, err := s.db.QueryContext(ctx, `SELECT symbol, name, industry, market, list_date, business, to_char(updated_at, 'YYYY-MM-DD HH24:MI') FROM stock_profile ORDER BY symbol`)
+	rows, err := s.db.QueryContext(ctx, `SELECT symbol, name, industry, market, board, list_date, business, to_char(updated_at, 'YYYY-MM-DD HH24:MI') FROM stock_profile ORDER BY symbol`)
 	if err != nil {
 		return fmt.Errorf("load profiles: %w", err)
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var p Profile
-		if err := rows.Scan(&p.Symbol, &p.Name, &p.Industry, &p.Market, &p.ListDate, &p.Business, &p.UpdatedAt); err != nil {
+		if err := rows.Scan(&p.Symbol, &p.Name, &p.Industry, &p.Market, &p.Board, &p.ListDate, &p.Business, &p.UpdatedAt); err != nil {
 			return fmt.Errorf("scan profile: %w", err)
 		}
 		p.Concepts = []string{}
@@ -155,6 +162,18 @@ func (s *Store) Profile(symbol string) (Profile, bool) {
 	defer s.mu.RUnlock()
 	p, ok := s.profiles[symbol]
 	return p, ok
+}
+
+// AllProfiles returns a snapshot of every cached profile (sorted by symbol).
+func (s *Store) AllProfiles() []Profile {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]Profile, 0, len(s.profiles))
+	for _, p := range s.profiles {
+		out = append(out, p)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Symbol < out[j].Symbol })
+	return out
 }
 
 // Bars returns the cached series for symbol (nil if unknown).
@@ -241,12 +260,12 @@ func (s *Store) SaveProfile(ctx context.Context, p Profile) error {
 		return fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO stock_profile (symbol, name, industry, market, list_date, business, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, now())
+	if _, err := tx.ExecContext(ctx, `INSERT INTO stock_profile (symbol, name, industry, market, board, list_date, business, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, now())
 		ON CONFLICT (symbol) DO UPDATE SET
 			name = EXCLUDED.name, industry = EXCLUDED.industry, market = EXCLUDED.market,
-			list_date = EXCLUDED.list_date, business = EXCLUDED.business, updated_at = now()`,
-		p.Symbol, p.Name, p.Industry, p.Market, p.ListDate, p.Business); err != nil {
+			board = EXCLUDED.board, list_date = EXCLUDED.list_date, business = EXCLUDED.business, updated_at = now()`,
+		p.Symbol, p.Name, p.Industry, p.Market, p.Board, p.ListDate, p.Business); err != nil {
 		return fmt.Errorf("upsert profile: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM stock_concept WHERE symbol = $1`, p.Symbol); err != nil {

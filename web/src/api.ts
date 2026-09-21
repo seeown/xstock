@@ -84,6 +84,7 @@ export interface StockProfile {
   name: string
   industry: string
   market: string
+  board: string
   listDate: string
   business: string
   concepts: string[]

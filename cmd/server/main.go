@@ -4,18 +4,15 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
-	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/joho/godotenv"
-
+	"nstock/internal/config"
 	"nstock/internal/market"
 	"nstock/internal/store"
 	"nstock/internal/tdx"
@@ -39,15 +36,11 @@ func normalizeBars(bars []market.Candle) []market.Candle {
 	return bars
 }
 
-// envFile is the project-root configuration file holding the database
-// credentials; nothing connection-related is hardcoded in the binary.
-const envFile = ".env.produce"
-
 func main() {
-	if err := godotenv.Load(envFile); err != nil {
-		log.Fatalf("load %s: %v — create it at the project root with the PostgreSQL settings", envFile, err)
+	if err := config.LoadEnv(); err != nil {
+		log.Fatalf("load %s: %v — create it at the project root with the PostgreSQL settings", config.EnvFile, err)
 	}
-	dsn, err := pgDSN()
+	dsn, err := config.PGDSN()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -170,7 +163,7 @@ func main() {
 		}
 		p := store.Profile{
 			Symbol: symbol, Name: fp.Name, Industry: fp.Industry, Market: fp.Market,
-			ListDate: fp.ListDate, Business: fp.Business,
+			Board: fp.Board, ListDate: fp.ListDate, Business: fp.Business,
 		}
 		if fp.Concepts != nil {
 			p.Concepts = fp.Concepts
@@ -254,27 +247,6 @@ func main() {
 
 	log.Printf("NStock API listening on %s (postgres: %s, demo symbol: DEMO)", listenURL(addr), pgSummary())
 	log.Fatal(http.ListenAndServe(addr, mux))
-}
-
-// pgDSN builds the PostgreSQL connection string from the environment loaded
-// out of .env.produce. Every variable is required so that no credentials or
-// host defaults live in the source code.
-func pgDSN() (string, error) {
-	vals := map[string]string{
-		"PG_USER":   os.Getenv("PG_USER"),
-		"PG_PASSWD": os.Getenv("PG_PASSWD"),
-		"PG_HOST":   os.Getenv("PG_HOST"),
-		"PG_PORT":   os.Getenv("PG_PORT"),
-		"DB_NAME":   os.Getenv("DB_NAME"),
-	}
-	for _, key := range []string{"PG_USER", "PG_PASSWD", "PG_HOST", "PG_PORT", "DB_NAME"} {
-		if vals[key] == "" {
-			return "", fmt.Errorf("%s is not set — check %s", key, envFile)
-		}
-	}
-	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
-		url.PathEscape(vals["PG_USER"]), url.PathEscape(vals["PG_PASSWD"]),
-		vals["PG_HOST"], vals["PG_PORT"], vals["DB_NAME"]), nil
 }
 
 func pgSummary() string {
