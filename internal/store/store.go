@@ -1,14 +1,15 @@
-// Package store keeps daily bars in SQLite and mirrors them into an in-memory
-// cache for lock-free reads by the strategy engine.
+// Package store keeps daily bars in PostgreSQL and mirrors them into an
+// in-memory cache for lock-free reads by the strategy engine.
 package store
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sort"
 	"sync"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"nstock/internal/market"
 )
@@ -20,23 +21,30 @@ type Store struct {
 	bars map[string][]market.Candle
 }
 
-// Open opens (creating if needed) the SQLite database at dsn and loads all
-// persisted bars into memory. Example dsn: "file:nstock.db".
+// SymbolInfo describes one cached symbol series for the data-management page.
+type SymbolInfo struct {
+	Symbol    string `json:"symbol"`
+	Count     int    `json:"count"`
+	FirstDate string `json:"firstDate"`
+	LastDate  string `json:"lastDate"`
+}
+
+// Open opens the PostgreSQL database at dsn (URL or key=value form) and loads
+// all persisted bars into memory. Example dsn:
+// "postgres://wyf:password@127.0.0.1:5432/nstock".
 func Open(ctx context.Context, dsn string) (*Store, error) {
-	db, err := sql.Open("sqlite", dsn)
+	db, err := sql.Open("pgx", dsn)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite: %w", err)
+		return nil, fmt.Errorf("open postgres: %w", err)
 	}
-	// A single connection avoids SQLITE_BUSY between concurrent handlers.
-	db.SetMaxOpenConns(1)
 	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS bars (
 		symbol TEXT NOT NULL,
 		date   TEXT NOT NULL,
-		open   REAL NOT NULL,
-		high   REAL NOT NULL,
-		low    REAL NOT NULL,
-		close  REAL NOT NULL,
-		volume REAL NOT NULL,
+		open   DOUBLE PRECISION NOT NULL,
+		high   DOUBLE PRECISION NOT NULL,
+		low    DOUBLE PRECISION NOT NULL,
+		close  DOUBLE PRECISION NOT NULL,
+		volume DOUBLE PRECISION NOT NULL,
 		PRIMARY KEY (symbol, date)
 	)`); err != nil {
 		db.Close()
@@ -76,6 +84,26 @@ func (s *Store) Bars(symbol string) []market.Candle {
 	return s.bars[symbol]
 }
 
+// Symbols returns a sorted summary of every cached series (including seeds).
+func (s *Store) Symbols() []SymbolInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]SymbolInfo, 0, len(s.bars))
+	for symbol, bars := range s.bars {
+		if len(bars) == 0 {
+			continue
+		}
+		out = append(out, SymbolInfo{
+			Symbol:    symbol,
+			Count:     len(bars),
+			FirstDate: bars[0].Date,
+			LastDate:  bars[len(bars)-1].Date,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Symbol < out[j].Symbol })
+	return out
+}
+
 // Seed registers a memory-only series (used for the built-in DEMO symbol).
 func (s *Store) Seed(symbol string, bars []market.Candle) {
 	s.mu.Lock()
@@ -96,10 +124,10 @@ func (s *Store) Replace(ctx context.Context, symbol string, bars []market.Candle
 		return fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `DELETE FROM bars WHERE symbol = ?`, symbol); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM bars WHERE symbol = $1`, symbol); err != nil {
 		return fmt.Errorf("delete old bars: %w", err)
 	}
-	stmt, err := tx.PrepareContext(ctx, `INSERT INTO bars (symbol, date, open, high, low, close, volume) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO bars (symbol, date, open, high, low, close, volume) VALUES ($1, $2, $3, $4, $5, $6, $7)`)
 	if err != nil {
 		return fmt.Errorf("prepare insert: %w", err)
 	}

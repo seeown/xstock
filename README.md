@@ -1,6 +1,6 @@
 # NStock MVP
 
-一个 Go 实现的 N 字战法筛选和日线回测 API。内置 `DEMO` 演示标的；支持通过通达信行情协议拉取沪深股票的**前复权日线**并持久化到本地 SQLite，重启后自动加载。
+一个 Go 实现的 N 字战法筛选和日线回测 API。内置 `DEMO` 演示标的；支持通过通达信行情协议拉取沪深股票的**前复权日线**并持久化到本地 PostgreSQL，重启后自动加载。
 
 ## 运行
 
@@ -10,6 +10,25 @@ go run ./cmd/server
 
 打开浏览器访问 `http://localhost:8080/`，即可使用网页仪表盘修改策略参数、运行回测，并查看价格走势、N 字信号和交易明细。
 
+### 前端
+
+网页使用 React + Vite 构建（源码在 `web/`），构建产物已提交到 `cmd/server/web/dist`，因此直接 `go run ./cmd/server` 即可运行完整应用。
+
+前端开发热更新：
+
+```bash
+cd web
+npm install
+npm run dev   # http://localhost:5173，API 自动代理到 :8080
+```
+
+重新构建生产产物：
+
+```bash
+cd web
+npm run build   # 输出到 cmd/server/web/dist
+```
+
 ### 真实数据
 
 在仪表盘输入股票代码（如 `600519.SH`、`000001.SZ`），点击「同步真实数据」；或调用同步接口：
@@ -18,12 +37,31 @@ go run ./cmd/server
 curl -X POST http://localhost:8080/api/sync/600519.SH
 ```
 
-数据通过 `gotdx` 连接通达信行情服务器获取全量前复权日K，写入启动目录下的 `nstock.db`（可用环境变量 `NSTOCK_DB` 指定路径）。前复权数据会随分红除权整体重算，因此每次同步都全量替换该股票的本地序列，避免新旧复权基准混用。服务地址可用 `NSTOCK_ADDR` 修改（默认 `:8080`）。
+数据通过 `gotdx` 连接通达信行情服务器获取全量前复权日K，写入本地 PostgreSQL（建表自动完成）。前复权数据会随分红除权整体重算，因此每次同步都全量替换该股票的本地序列，避免新旧复权基准混用。服务地址可用 `NSTOCK_ADDR` 修改（默认 `:8080`）。
+
+数据库连接配置在项目根目录的 `.env.produce` 文件中（不提交到 git），程序启动时读取；已在进程环境中设置的变量优先于该文件：
+
+```bash
+PG_USER=wyf
+PG_PASSWD=password
+PG_HOST=127.0.0.1
+PG_PORT=5432
+DB_NAME=nstock
+```
+
+任一变量缺失时服务会拒绝启动。
 
 默认参数：
 
 ```bash
 curl http://localhost:8080/api/params/default
+```
+
+查看大盘指数（网页「大盘行情」页会自动同步并展示 K 线、MA5、MA10）：
+
+```bash
+curl http://localhost:8080/api/market/indices
+curl -X POST http://localhost:8080/api/sync/000001.SH   # 上证指数
 ```
 
 筛选演示信号：

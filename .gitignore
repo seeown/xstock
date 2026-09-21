@@ -1,4 +1,5 @@
 nstock-server
 *.test
-.db
 .DS_Store
+web/node_modules
+.env.*

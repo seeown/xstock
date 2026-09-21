@@ -40,18 +40,34 @@ func DefaultParams() NParams {
 }
 
 type Signal struct {
-	Symbol, Date, Reason                                                     string
-	BreakoutPrice, PriorHigh, PullbackLow, RisePct, PullbackPct, VolumeRatio float64
+	Symbol        string  `json:"symbol"`
+	Date          string  `json:"date"`
+	Reason        string  `json:"reason"`
+	BreakoutPrice float64 `json:"breakoutPrice"`
+	PriorHigh     float64 `json:"priorHigh"`
+	PullbackLow   float64 `json:"pullbackLow"`
+	RisePct       float64 `json:"risePct"`
+	PullbackPct   float64 `json:"pullbackPct"`
+	VolumeRatio   float64 `json:"volumeRatio"`
 }
 
 type Trade struct {
-	Symbol, BuyDate, SellDate, ExitReason string
-	BuyPrice, SellPrice, ReturnPct        float64
+	Symbol     string  `json:"symbol"`
+	BuyDate    string  `json:"buyDate"`
+	SellDate   string  `json:"sellDate"`
+	ExitReason string  `json:"exitReason"`
+	BuyPrice   float64 `json:"buyPrice"`
+	SellPrice  float64 `json:"sellPrice"`
+	ReturnPct  float64 `json:"returnPct"`
 }
 
 type Metrics struct {
-	InitialCash, FinalCash, TotalReturnPct, MaxDrawdownPct, WinRatePct float64
-	TradeCount                                                         int
+	InitialCash    float64 `json:"initialCash"`
+	FinalCash      float64 `json:"finalCash"`
+	TotalReturnPct float64 `json:"totalReturnPct"`
+	MaxDrawdownPct float64 `json:"maxDrawdownPct"`
+	WinRatePct     float64 `json:"winRatePct"`
+	TradeCount     int     `json:"tradeCount"`
 }
 
 type BacktestResult struct {
