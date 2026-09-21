@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -66,6 +67,41 @@ func main() {
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"status": "ok"}) })
 	mux.HandleFunc("GET /api/params/default", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, market.DefaultParams()) })
 	mux.HandleFunc("GET /api/stocks", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, s.Symbols()) })
+
+	// Stock browser: filtered/paginated profiles over the whole market.
+	mux.HandleFunc("GET /api/profiles", func(w http.ResponseWriter, r *http.Request) {
+		page := queryInt(r, "page", 1)
+		pageSize := queryInt(r, "pageSize", 50)
+		result := s.QueryProfiles(store.ProfileFilter{
+			Q:          r.URL.Query().Get("q"),
+			Board:      r.URL.Query().Get("board"),
+			Industry:   r.URL.Query().Get("industry"),
+			Concept:    r.URL.Query().Get("concept"),
+			SyncedOnly: r.URL.Query().Get("synced") == "1",
+			Page:       page,
+			PageSize:   pageSize,
+		})
+		writeJSON(w, 200, result)
+	})
+	mux.HandleFunc("GET /api/concepts", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, s.ConceptCounts()) })
+	mux.HandleFunc("GET /api/industries", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, s.Industries()) })
+
+	// GET /api/quotes?symbols=600519.SH,000001.SZ — latest prices for one page.
+	mux.HandleFunc("GET /api/quotes", func(w http.ResponseWriter, r *http.Request) {
+		raw := r.URL.Query().Get("symbols")
+		var symbols []string
+		for _, part := range strings.Split(raw, ",") {
+			if part = strings.TrimSpace(part); part != "" {
+				symbols = append(symbols, strings.ToUpper(part))
+			}
+		}
+		quotes, err := source.FetchQuotes(symbols)
+		if err != nil {
+			errorJSON(w, 502, err.Error())
+			return
+		}
+		writeJSON(w, 200, quotes)
+	})
 	mux.HandleFunc("GET /api/market/indices", func(w http.ResponseWriter, r *http.Request) {
 		type indexView struct {
 			Symbol    string `json:"symbol"`
@@ -255,6 +291,13 @@ func pgSummary() string {
 
 func getenv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+func queryInt(r *http.Request, key string, fallback int) int {
+	if v, err := strconv.Atoi(r.URL.Query().Get(key)); err == nil {
 		return v
 	}
 	return fallback

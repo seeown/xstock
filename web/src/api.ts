@@ -91,6 +91,39 @@ export interface StockProfile {
   updatedAt: string
 }
 
+export interface ProfileListItem extends StockProfile {
+  barCount: number
+}
+
+export interface ProfilePageResult {
+  items: ProfileListItem[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export interface ConceptCount {
+  concept: string
+  count: number
+}
+
+export interface Quote {
+  symbol: string
+  price: number
+  preClose: number
+  changePct: number
+}
+
+export interface ProfileQuery {
+  q?: string
+  board?: string
+  industry?: string
+  concept?: string
+  synced?: boolean
+  page?: number
+  pageSize?: number
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init)
   const data = await res.json().catch(() => ({}))
@@ -125,4 +158,19 @@ export const api = {
     request<StockProfile>(`/api/stocks/${encodeURIComponent(symbol)}/profile`),
   syncProfile: (symbol: string) =>
     request<StockProfile>(`/api/profile/sync/${encodeURIComponent(symbol)}`, { method: 'POST' }),
+  profiles: (query: ProfileQuery) => {
+    const params = new URLSearchParams()
+    if (query.q) params.set('q', query.q)
+    if (query.board) params.set('board', query.board)
+    if (query.industry) params.set('industry', query.industry)
+    if (query.concept) params.set('concept', query.concept)
+    if (query.synced) params.set('synced', '1')
+    params.set('page', String(query.page ?? 1))
+    params.set('pageSize', String(query.pageSize ?? 50))
+    return request<ProfilePageResult>(`/api/profiles?${params.toString()}`)
+  },
+  concepts: () => request<ConceptCount[]>('/api/concepts'),
+  industries: () => request<string[]>('/api/industries'),
+  quotes: (symbols: string[]) =>
+    request<Quote[]>(`/api/quotes?symbols=${encodeURIComponent(symbols.join(','))}`),
 }

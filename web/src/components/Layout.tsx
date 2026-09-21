@@ -13,6 +13,13 @@ const icons = {
       <path d="M17 6v2M17 16v2M14.8 8h4.4v8h-4.4zM17 10v4" />
     </svg>
   ),
+  stocks: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="7" />
+      <path d="m21 21-4.3-4.3" />
+      <path d="M8 11h6M11 8v6" />
+    </svg>
+  ),
   data: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <ellipse cx="12" cy="5" rx="8" ry="3" />
@@ -30,6 +37,7 @@ const icons = {
 
 const navItems = [
   { to: '/', label: '仪表盘', icon: icons.dashboard, end: true },
+  { to: '/stocks', label: '个股', icon: icons.stocks },
   { to: '/market', label: '大盘行情', icon: icons.market },
   { to: '/data', label: '数据管理', icon: icons.data },
   { to: '/strategy', label: '策略说明', icon: icons.strategy },

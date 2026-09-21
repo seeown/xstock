@@ -6,7 +6,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"slices"
 	"sort"
+	"strings"
 	"sync"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -173,6 +175,124 @@ func (s *Store) AllProfiles() []Profile {
 		out = append(out, p)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Symbol < out[j].Symbol })
+	return out
+}
+
+// ProfileFilter narrows the profile cache for the stock browser page.
+type ProfileFilter struct {
+	Q          string // substring of symbol or name
+	Board      string
+	Industry   string
+	Concept    string
+	SyncedOnly bool // only stocks that also have local bars
+	Page, PageSize int
+}
+
+// ProfileListItem couples a profile with its local bar-series status.
+type ProfileListItem struct {
+	Profile
+	BarCount int `json:"barCount"`
+}
+
+// ProfilePage is one page of filtered profiles.
+type ProfilePage struct {
+	Items    []ProfileListItem `json:"items"`
+	Total    int               `json:"total"`
+	Page     int               `json:"page"`
+	PageSize int               `json:"pageSize"`
+}
+
+// QueryProfiles filters the in-memory profile cache (a few thousand rows, so
+// a linear scan under RLock is plenty) and returns the requested page.
+func (s *Store) QueryProfiles(f ProfileFilter) ProfilePage {
+	if f.Page < 1 {
+		f.Page = 1
+	}
+	if f.PageSize < 1 || f.PageSize > 200 {
+		f.PageSize = 50
+	}
+	q := strings.ToLower(f.Q)
+
+	s.mu.RLock()
+	matched := make([]ProfileListItem, 0, len(s.profiles))
+	for _, p := range s.profiles {
+		if q != "" && !strings.Contains(strings.ToLower(p.Symbol), q) && !strings.Contains(p.Name, f.Q) {
+			continue
+		}
+		if f.Board != "" && p.Board != f.Board {
+			continue
+		}
+		if f.Industry != "" && p.Industry != f.Industry {
+			continue
+		}
+		if f.Concept != "" && !slices.Contains(p.Concepts, f.Concept) {
+			continue
+		}
+		barCount := len(s.bars[p.Symbol])
+		if f.SyncedOnly && barCount == 0 {
+			continue
+		}
+		matched = append(matched, ProfileListItem{Profile: p, BarCount: barCount})
+	}
+	s.mu.RUnlock()
+
+	sort.Slice(matched, func(i, j int) bool { return matched[i].Symbol < matched[j].Symbol })
+	total := len(matched)
+	start := (f.Page - 1) * f.PageSize
+	if start > total {
+		start = total
+	}
+	end := start + f.PageSize
+	if end > total {
+		end = total
+	}
+	return ProfilePage{Items: matched[start:end], Total: total, Page: f.Page, PageSize: f.PageSize}
+}
+
+// ConceptCount aggregates how many stocks each concept holds.
+type ConceptCount struct {
+	Concept string `json:"concept"`
+	Count   int    `json:"count"`
+}
+
+// ConceptCounts aggregates concept membership over the cache, most popular first.
+func (s *Store) ConceptCounts() []ConceptCount {
+	s.mu.RLock()
+	counts := map[string]int{}
+	for _, p := range s.profiles {
+		for _, c := range p.Concepts {
+			counts[c]++
+		}
+	}
+	s.mu.RUnlock()
+	out := make([]ConceptCount, 0, len(counts))
+	for c, n := range counts {
+		out = append(out, ConceptCount{Concept: c, Count: n})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Count != out[j].Count {
+			return out[i].Count > out[j].Count
+		}
+		return out[i].Concept < out[j].Concept
+	})
+	return out
+}
+
+// Industries returns the distinct non-empty industry names.
+func (s *Store) Industries() []string {
+	s.mu.RLock()
+	set := map[string]bool{}
+	for _, p := range s.profiles {
+		if p.Industry != "" {
+			set[p.Industry] = true
+		}
+	}
+	s.mu.RUnlock()
+	out := make([]string, 0, len(set))
+	for i := range set {
+		out = append(out, i)
+	}
+	sort.Strings(out)
 	return out
 }
 
