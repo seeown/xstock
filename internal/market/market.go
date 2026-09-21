@@ -77,7 +77,7 @@ type BacktestResult struct {
 }
 
 func ValidParams(p NParams) error {
-	if p.RiseDays < 2 || p.PullbackMinDays < 1 || p.PullbackMaxDays < p.PullbackMinDays ||
+	if p.RiseDays < 1 || p.PullbackMinDays < 1 || p.PullbackMaxDays < p.PullbackMinDays ||
 		p.RiseMinPct <= 0 || p.PullbackMaxPct <= 0 || p.VolumeRatioMin <= 0 ||
 		p.StopLossPct <= 0 || p.TakeProfitPct <= 0 || p.MaxHoldDays < 1 {
 		return errInvalidParams
