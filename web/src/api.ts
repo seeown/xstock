@@ -79,6 +79,17 @@ export interface IndexInfo {
   lastDate?: string
 }
 
+export interface StockProfile {
+  symbol: string
+  name: string
+  industry: string
+  market: string
+  listDate: string
+  business: string
+  concepts: string[]
+  updatedAt: string
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init)
   const data = await res.json().catch(() => ({}))
@@ -109,4 +120,8 @@ export const api = {
     }),
   stocks: () => request<StockSummary[]>('/api/stocks'),
   marketIndices: () => request<IndexInfo[]>('/api/market/indices'),
+  profile: (symbol: string) =>
+    request<StockProfile>(`/api/stocks/${encodeURIComponent(symbol)}/profile`),
+  syncProfile: (symbol: string) =>
+    request<StockProfile>(`/api/profile/sync/${encodeURIComponent(symbol)}`, { method: 'POST' }),
 }

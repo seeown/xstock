@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, type Candle, type IndexInfo } from '../api'
-import CandleChart, { computeMA } from '../components/CandleChart'
+import KlineChart, { computeMA } from '../components/KlineChart'
 import { Banner, Card, CardHead, fmt, pct } from '../components/ui'
 
 type RangeKey = '60' | '250' | '750' | 'all'
@@ -155,7 +155,7 @@ export default function Market() {
       <Card>
         <CardHead
           title={activeInfo ? `${activeInfo.name} 日K` : '日K'}
-          sub="悬停查看单日开高低收与均线值"
+          sub="MA5/10/20/30/60/年线(250) + 成交量，支持滚轮缩放与拖动"
           right={
             <div className="range-tabs">
               {ranges.map(r => (
@@ -166,7 +166,7 @@ export default function Market() {
             </div>
           }
         />
-        {loading ? <div className="chart-empty">正在加载K线…</div> : <CandleChart bars={bars} />}
+        {loading ? <div className="chart-empty">正在加载K线…</div> : <KlineChart bars={bars} />}
       </Card>
     </div>
   )

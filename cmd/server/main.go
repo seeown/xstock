@@ -151,6 +151,50 @@ func main() {
 		})
 	})
 
+	// POST /api/profile/sync/{symbol} refreshes one stock's metadata: F10 text
+	// (name / industry / business), IPO date and TDX concept tags.
+	mux.HandleFunc("POST /api/profile/sync/{symbol}", func(w http.ResponseWriter, r *http.Request) {
+		symbol := strings.ToUpper(r.PathValue("symbol"))
+		if _, isIndex := tdx.IndexOf(symbol); isIndex {
+			errorJSON(w, 400, "指数没有个股档案；请输入股票代码，例如 600519.SH")
+			return
+		}
+		if symbol == "DEMO" {
+			errorJSON(w, 400, "DEMO 是内置演示数据；请输入真实代码，例如 600519.SH")
+			return
+		}
+		fp, err := source.FetchProfile(symbol)
+		if err != nil {
+			errorJSON(w, 502, err.Error())
+			return
+		}
+		p := store.Profile{
+			Symbol: symbol, Name: fp.Name, Industry: fp.Industry, Market: fp.Market,
+			ListDate: fp.ListDate, Business: fp.Business,
+		}
+		if fp.Concepts != nil {
+			p.Concepts = fp.Concepts
+		}
+		if err := s.SaveProfile(r.Context(), p); err != nil {
+			errorJSON(w, 500, err.Error())
+			return
+		}
+		if saved, ok := s.Profile(symbol); ok {
+			p = saved
+		}
+		writeJSON(w, 200, p)
+	})
+
+	mux.HandleFunc("GET /api/stocks/{symbol}/profile", func(w http.ResponseWriter, r *http.Request) {
+		symbol := strings.ToUpper(r.PathValue("symbol"))
+		p, ok := s.Profile(symbol)
+		if !ok {
+			errorJSON(w, 404, "profile not synced")
+			return
+		}
+		writeJSON(w, 200, p)
+	})
+
 	mux.HandleFunc("GET /api/stocks/{symbol}/signals", func(w http.ResponseWriter, r *http.Request) {
 		symbol := strings.ToUpper(r.PathValue("symbol"))
 		bars := s.Bars(symbol)

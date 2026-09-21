@@ -159,3 +159,74 @@ func TestReplaceSwapsSeries(t *testing.T) {
 		t.Fatalf("after replace bars = %d, want %d", len(got), len(short))
 	}
 }
+
+func TestSaveProfilePersistsAndSwapsConcepts(t *testing.T) {
+	srv, err := envTestServer()
+	if err != nil {
+		t.Skipf("postgres config: %v", err)
+	}
+	dbName := fmt.Sprintf("nstock_test_%d", time.Now().UnixNano())
+	ctx := context.Background()
+
+	admin, err := sql.Open("pgx", srv.dsn("postgres"))
+	if err != nil {
+		t.Skipf("postgres unavailable: %v", err)
+	}
+	if err := admin.PingContext(ctx); err != nil {
+		t.Skipf("postgres unreachable: %v", err)
+	}
+	defer admin.Close()
+	if _, err := admin.ExecContext(ctx, `CREATE DATABASE `+dbName); err != nil {
+		t.Fatalf("create test database: %v", err)
+	}
+	defer func() {
+		_, _ = admin.ExecContext(context.Background(), `DROP DATABASE `+dbName)
+	}()
+
+	s1, err := Open(ctx, srv.dsn(dbName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s1.SaveProfile(ctx, Profile{
+		Symbol: "600519.SH", Name: "贵州茅台", Industry: "白酒", Market: "SH",
+		ListDate: "2001-08-27", Business: "白酒生产销售",
+		Concepts: []string{"白酒", "融资融券"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Concept list is replaced wholesale on the second save.
+	if err := s1.SaveProfile(ctx, Profile{
+		Symbol: "600519.SH", Name: "贵州茅台", Industry: "白酒", Market: "SH",
+		ListDate: "2001-08-27", Business: "白酒生产销售",
+		Concepts: []string{"白酒", "央企改革"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s1.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	s2, err := Open(ctx, srv.dsn(dbName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s2.Close()
+	p, ok := s2.Profile("600519.SH")
+	if !ok {
+		t.Fatal("profile did not persist")
+	}
+	if p.Name != "贵州茅台" || p.Industry != "白酒" || p.ListDate != "2001-08-27" {
+		t.Fatalf("persisted profile mismatch: %+v", p)
+	}
+	// Concepts come back from the DB in collation order; compare as a set.
+	got := map[string]bool{}
+	for _, c := range p.Concepts {
+		got[c] = true
+	}
+	if len(p.Concepts) != 2 || !got["白酒"] || !got["央企改革"] {
+		t.Fatalf("persisted concepts mismatch: %v", p.Concepts)
+	}
+	if _, ok := s2.Profile("000001.SZ"); ok {
+		t.Fatal("unknown symbol should miss")
+	}
+}

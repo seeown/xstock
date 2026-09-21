@@ -17,8 +17,9 @@ import (
 type Store struct {
 	db *sql.DB
 
-	mu   sync.RWMutex
-	bars map[string][]market.Candle
+	mu       sync.RWMutex
+	bars     map[string][]market.Candle
+	profiles map[string]Profile
 }
 
 // SymbolInfo describes one cached symbol series for the data-management page.
@@ -27,6 +28,19 @@ type SymbolInfo struct {
 	Count     int    `json:"count"`
 	FirstDate string `json:"firstDate"`
 	LastDate  string `json:"lastDate"`
+}
+
+// Profile is the slow-changing metadata of one stock: who they are and what
+// they do, as opposed to bars which change every trading day.
+type Profile struct {
+	Symbol    string   `json:"symbol"`
+	Name      string   `json:"name"`
+	Industry  string   `json:"industry"`
+	Market    string   `json:"market"`
+	ListDate  string   `json:"listDate"`
+	Business  string   `json:"business"`
+	Concepts  []string `json:"concepts"`
+	UpdatedAt string   `json:"updatedAt"`
 }
 
 // Open opens the PostgreSQL database at dsn (URL or key=value form) and loads
@@ -50,7 +64,27 @@ func Open(ctx context.Context, dsn string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("create bars table: %w", err)
 	}
-	s := &Store{db: db, bars: map[string][]market.Candle{}}
+	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS stock_profile (
+		symbol     TEXT PRIMARY KEY,
+		name       TEXT NOT NULL DEFAULT '',
+		industry   TEXT NOT NULL DEFAULT '',
+		market     TEXT NOT NULL DEFAULT '',
+		list_date  TEXT NOT NULL DEFAULT '',
+		business   TEXT NOT NULL DEFAULT '',
+		updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+	)`); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("create stock_profile table: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS stock_concept (
+		symbol  TEXT NOT NULL,
+		concept TEXT NOT NULL,
+		PRIMARY KEY (symbol, concept)
+	)`); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("create stock_concept table: %w", err)
+	}
+	s := &Store{db: db, bars: map[string][]market.Candle{}, profiles: map[string]Profile{}}
 	if err := s.loadAll(ctx); err != nil {
 		db.Close()
 		return nil, err
@@ -74,7 +108,53 @@ func (s *Store) loadAll(ctx context.Context) error {
 		}
 		s.bars[symbol] = append(s.bars[symbol], c)
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	return s.loadProfiles(ctx)
+}
+
+func (s *Store) loadProfiles(ctx context.Context) error {
+	rows, err := s.db.QueryContext(ctx, `SELECT symbol, name, industry, market, list_date, business, to_char(updated_at, 'YYYY-MM-DD HH24:MI') FROM stock_profile ORDER BY symbol`)
+	if err != nil {
+		return fmt.Errorf("load profiles: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var p Profile
+		if err := rows.Scan(&p.Symbol, &p.Name, &p.Industry, &p.Market, &p.ListDate, &p.Business, &p.UpdatedAt); err != nil {
+			return fmt.Errorf("scan profile: %w", err)
+		}
+		p.Concepts = []string{}
+		s.profiles[p.Symbol] = p
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	crews, err := s.db.QueryContext(ctx, `SELECT symbol, concept FROM stock_concept ORDER BY symbol, concept`)
+	if err != nil {
+		return fmt.Errorf("load concepts: %w", err)
+	}
+	defer crews.Close()
+	for crews.Next() {
+		var symbol, concept string
+		if err := crews.Scan(&symbol, &concept); err != nil {
+			return fmt.Errorf("scan concept: %w", err)
+		}
+		if p, ok := s.profiles[symbol]; ok {
+			p.Concepts = append(p.Concepts, concept)
+			s.profiles[symbol] = p
+		}
+	}
+	return crews.Err()
+}
+
+// Profile returns the cached metadata for symbol.
+func (s *Store) Profile(symbol string) (Profile, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	p, ok := s.profiles[symbol]
+	return p, ok
 }
 
 // Bars returns the cached series for symbol (nil if unknown).
@@ -143,6 +223,51 @@ func (s *Store) Replace(ctx context.Context, symbol string, bars []market.Candle
 
 	s.mu.Lock()
 	s.bars[symbol] = bars
+	s.mu.Unlock()
+	return nil
+}
+
+// SaveProfile upserts one stock's metadata and atomically swaps its concept
+// list in the same transaction, then mirrors the result into the cache.
+func (s *Store) SaveProfile(ctx context.Context, p Profile) error {
+	if p.Symbol == "" {
+		return fmt.Errorf("profile symbol is empty")
+	}
+	if p.Concepts == nil {
+		p.Concepts = []string{}
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `INSERT INTO stock_profile (symbol, name, industry, market, list_date, business, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, now())
+		ON CONFLICT (symbol) DO UPDATE SET
+			name = EXCLUDED.name, industry = EXCLUDED.industry, market = EXCLUDED.market,
+			list_date = EXCLUDED.list_date, business = EXCLUDED.business, updated_at = now()`,
+		p.Symbol, p.Name, p.Industry, p.Market, p.ListDate, p.Business); err != nil {
+		return fmt.Errorf("upsert profile: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM stock_concept WHERE symbol = $1`, p.Symbol); err != nil {
+		return fmt.Errorf("delete old concepts: %w", err)
+	}
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO stock_concept (symbol, concept) VALUES ($1, $2)`)
+	if err != nil {
+		return fmt.Errorf("prepare concept insert: %w", err)
+	}
+	defer stmt.Close()
+	for _, c := range p.Concepts {
+		if _, err := stmt.ExecContext(ctx, p.Symbol, c); err != nil {
+			return fmt.Errorf("insert concept %s: %w", c, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+
+	s.mu.Lock()
+	s.profiles[p.Symbol] = p
 	s.mu.Unlock()
 	return nil
 }

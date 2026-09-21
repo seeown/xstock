@@ -16,8 +16,9 @@ import (
 // Client wraps a gotdx client. gotdx keeps its own host pool and reconnects
 // on bad connections; the mutex keeps multi-request access serialized.
 type Client struct {
-	mu     sync.Mutex
-	client *gotdx.Client
+	mu       sync.Mutex
+	client   *gotdx.Client
+	concepts *conceptIndex // concept block cache, see profile.go
 }
 
 func New() *Client {

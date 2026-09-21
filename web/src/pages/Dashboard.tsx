@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api, type BacktestResult, type Candle, type NParams } from '../api'
+import KlineChart from '../components/KlineChart'
 import PriceChart from '../components/PriceChart'
+import StockProfileCard from '../components/StockProfileCard'
 import {
   Banner, Card, CardHead, Empty, MetricCard, Spinner, exitReasonText, fmt, money, pct,
 } from '../components/ui'
@@ -31,6 +33,7 @@ export default function Dashboard() {
   const initialSymbol = (searchParams.get('symbol') || 'DEMO').toUpperCase()
 
   const [symbolInput, setSymbolInput] = useState(initialSymbol)
+  const [activeSymbol, setActiveSymbol] = useState(initialSymbol)
   const [params, setParams] = useState<NParams | null>(null)
   const [bars, setBars] = useState<Candle[]>([])
   const [result, setResult] = useState<BacktestResult | null>(null)
@@ -50,6 +53,7 @@ export default function Dashboard() {
       const [bt, barData] = await Promise.all([api.backtest(symbol, p), api.bars(symbol)])
       setResult(bt)
       setBars(barData)
+      setActiveSymbol(symbol)
       setFeedback({ text: `回测完成：${symbol} 发现 ${bt.signals.length} 个 N 字信号。`, kind: 'success' })
     } catch (e) {
       setResult(null)
@@ -147,6 +151,18 @@ export default function Dashboard() {
             <MetricCard label="最大回撤" value={m ? pct(m.maxDrawdownPct) : '—'} tone="neg" />
             <MetricCard label="胜率 / 交易" value={m ? `${pct(m.winRatePct)} / ${m.tradeCount}` : '—'} />
           </div>
+
+          {activeSymbol !== 'DEMO' && <StockProfileCard symbol={activeSymbol} />}
+
+          {bars.length > 0 && (
+            <Card>
+              <CardHead
+                title={`${activeSymbol} 日K`}
+                sub="MA5/10/20/30/60/年线(250) + 成交量，支持滚轮缩放与拖动"
+              />
+              <KlineChart bars={bars} />
+            </Card>
+          )}
 
           <Card>
             <CardHead

@@ -57,7 +57,7 @@ DB_NAME=nstock
 curl http://localhost:8080/api/params/default
 ```
 
-查看大盘指数（网页「大盘行情」页会自动同步并展示 K 线、MA5、MA10）：
+查看大盘指数（网页「大盘行情」页会自动同步并展示 K 线、MA5/10/20/30/60/年线(250) 与成交量）：
 
 ```bash
 curl http://localhost:8080/api/market/indices
@@ -69,6 +69,15 @@ curl -X POST http://localhost:8080/api/sync/000001.SH   # 上证指数
 ```bash
 curl http://localhost:8080/api/stocks/DEMO/signals
 ```
+
+同步个股档案（F10 业务描述、行业、上市日期、通达信概念板块，数据存入 PostgreSQL）：
+
+```bash
+curl -X POST http://localhost:8080/api/profile/sync/600519.SH
+curl http://localhost:8080/api/stocks/600519.SH/profile
+```
+
+仪表盘页会自动加载已同步标的的个股档案（概念标签 + 业务文本），并在日K图上叠加 MA5/10/20/30/60/年线(250) 与成交量副图。
 
 获取仪表盘使用的日线数据：
 

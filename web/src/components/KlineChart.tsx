@@ -1,0 +1,87 @@
+import { useEffect, useRef } from 'react'
+import { init, dispose } from 'klinecharts'
+import type { Chart, KLineData } from 'klinecharts'
+import type { Candle } from '../api'
+
+export const MA_PERIODS = [5, 10, 20, 30, 60, 250]
+
+// The default theme ships only 5 indicator line colors; a 6th series (年线)
+// would render with no color at all, so supply one per MA line explicitly.
+const MA_COLORS = ['#FF9600', '#935EBD', '#4C6BF5', '#E11D74', '#01C5C4', '#F5B544']
+
+// SMA over closes, shared with page-level stat tiles.
+export function computeMA(bars: Candle[], period: number): Array<number | null> {
+  const out: Array<number | null> = []
+  let sum = 0
+  for (let i = 0; i < bars.length; i++) {
+    sum += bars[i].close
+    if (i >= period) sum -= bars[i - period].close
+    out.push(i >= period - 1 ? sum / period : null)
+  }
+  return out
+}
+
+// Candlestick chart on klinecharts v10: main pane shows MA5/10/20/30/60/年线
+// (250), sub pane shows volume. Zoom/pan/crosshair are built in. v10 loads data
+// through a DataLoader instead of applyNewData; our dataset is fully local, so
+// the loader hands back the whole series on init.
+export default function KlineChart({ bars, height = 420 }: { bars: Candle[]; height?: number }) {
+  const hostRef = useRef<HTMLDivElement>(null)
+  const chartRef = useRef<Chart | null>(null)
+
+  useEffect(() => {
+    const el = hostRef.current
+    if (!el || !bars.length) return
+
+    const data: KLineData[] = bars.map(b => ({
+      timestamp: Date.parse(b.date),
+      open: b.open,
+      high: b.high,
+      low: b.low,
+      close: b.close,
+      volume: b.volume,
+    }))
+
+    // Rebuild on every series swap; a few thousand candles re-init instantly
+    // and this keeps zoom state consistent with the requested range.
+    if (chartRef.current) {
+      dispose(chartRef.current)
+      chartRef.current = null
+    }
+    const chart = init(el, { locale: 'zh-CN' })
+    if (!chart) return
+    chartRef.current = chart
+    chart.setStyles({
+      indicator: {
+        lines: MA_COLORS.map(color => ({ style: 'solid', smooth: false, size: 1, dashedValue: [2, 2], color })),
+      },
+    })
+    chart.setDataLoader({
+      getBars: ({ callback }) => callback(data, false),
+    })
+    // v10 only asks the loader for bars once both symbol and period are set.
+    chart.setSymbol({ ticker: bars.length ? 'local' : 'none', pricePrecision: 2, volumePrecision: 0 })
+    chart.setPeriod({ type: 'day', span: 1 })
+    chart.createIndicator({ name: 'MA', calcParams: MA_PERIODS, paneId: 'candle_pane' }, false)
+    chart.createIndicator('VOL')
+
+    return () => {
+      chartRef.current = null
+      dispose(el)
+    }
+  }, [bars])
+
+  if (!bars.length) {
+    return (
+      <div className="chart-empty" style={{ height }}>
+        暂无K线数据
+      </div>
+    )
+  }
+
+  return (
+    <div className="kline-wrap" style={{ height }}>
+      <div ref={hostRef} style={{ width: '100%', height: '100%' }} />
+    </div>
+  )
+}

@@ -483,3 +483,51 @@ td.num, th.num { text-align: right; }
   .nav-item span { display: none; }
   .nav-item { padding: 9px; }
 }
+
+/* klinecharts 容器与档案卡片 */
+.kline-wrap {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--panel-2);
+}
+.kline-wrap svg { display: block; }
+
+.btn.small { padding: 5px 12px; font-size: 12px; }
+
+.profile-body { display: flex; flex-direction: column; gap: 12px; }
+.profile-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.profile-name { font-size: 20px; font-weight: 700; }
+.profile-meta { display: flex; gap: 10px; color: var(--muted); font-size: 13px; flex-wrap: wrap; }
+.profile-missing { color: var(--muted); padding: 8px 0; }
+.profile-error { color: var(--red); font-size: 13px; }
+.concept-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.concept-chip {
+  padding: 3px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: rgba(79, 140, 255, 0.08);
+  color: #9ec1ff;
+  font-size: 12.5px;
+}
+.profile-business summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  user-select: none;
+}
+.profile-business pre {
+  margin: 10px 0 0;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--ink);
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
