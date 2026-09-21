@@ -9,6 +9,10 @@ export const MA_PERIODS = [5, 10, 20, 30, 60, 250]
 // would render with no color at all, so supply one per MA line explicitly.
 const MA_COLORS = ['#FF9600', '#935EBD', '#4C6BF5', '#E11D74', '#01C5C4', '#F5B544']
 
+// A股惯例：涨红跌绿。
+const UP_COLOR = '#f4577a'
+const DOWN_COLOR = '#22c58b'
+
 // SMA over closes, shared with page-level stat tiles.
 export function computeMA(bars: Candle[], period: number): Array<number | null> {
   const out: Array<number | null> = []
@@ -51,8 +55,24 @@ export default function KlineChart({ bars, height = 420 }: { bars: Candle[]; hei
     const chart = init(el, { locale: 'zh-CN' })
     if (!chart) return
     chartRef.current = chart
+
     chart.setStyles({
+      grid: {
+        horizontal: { show: false },
+        vertical: { show: false },
+      },
+      candle: {
+        bar: {
+          upColor: UP_COLOR, downColor: DOWN_COLOR,
+          upBorderColor: UP_COLOR, downBorderColor: DOWN_COLOR,
+          upWickColor: UP_COLOR, downWickColor: DOWN_COLOR,
+        },
+        priceMark: {
+          last: { upColor: UP_COLOR, downColor: DOWN_COLOR },
+        },
+      },
       indicator: {
+        bars: [{ style: 'fill', upColor: UP_COLOR, downColor: DOWN_COLOR }],
         lines: MA_COLORS.map(color => ({ style: 'solid', smooth: false, size: 1, dashedValue: [2, 2], color })),
       },
     })

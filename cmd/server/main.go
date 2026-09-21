@@ -15,6 +15,7 @@ import (
 
 	"nstock/internal/config"
 	"nstock/internal/market"
+	"nstock/internal/quotes"
 	"nstock/internal/store"
 	"nstock/internal/tdx"
 )
@@ -63,30 +64,60 @@ func main() {
 		}
 	}()
 
+	// Background whole-market quote snapshot for ranking columns.
+	quoteCache := quotes.New(3)
+	defer quoteCache.Close()
+	go quoteCache.Run(context.Background(), func() []string {
+		all := s.AllProfiles()
+		syms := make([]string, 0, len(all))
+		for _, p := range all {
+			syms = append(syms, p.Symbol)
+		}
+		return syms
+	}, time.Minute)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"status": "ok"}) })
 	mux.HandleFunc("GET /api/params/default", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, market.DefaultParams()) })
 	mux.HandleFunc("GET /api/stocks", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, s.Symbols()) })
 
-	// Stock browser: filtered/paginated profiles over the whole market.
+	// Stock browser: filtered profiles over the whole market, sortable on
+	// every column (price/change/amount ranking uses the quote cache).
 	mux.HandleFunc("GET /api/profiles", func(w http.ResponseWriter, r *http.Request) {
-		page := queryInt(r, "page", 1)
-		pageSize := queryInt(r, "pageSize", 50)
-		result := s.QueryProfiles(store.ProfileFilter{
+		items := s.QueryProfiles(store.ProfileFilter{
 			Q:          r.URL.Query().Get("q"),
 			Board:      r.URL.Query().Get("board"),
 			Industry:   r.URL.Query().Get("industry"),
 			Concept:    r.URL.Query().Get("concept"),
 			SyncedOnly: r.URL.Query().Get("synced") == "1",
-			Page:       page,
-			PageSize:   pageSize,
 		})
-		writeJSON(w, 200, result)
+		sortProfiles(items, r.URL.Query().Get("sort"), r.URL.Query().Get("order") == "desc", quoteCache.Snapshot())
+		page := queryInt(r, "page", 1)
+		pageSize := queryInt(r, "pageSize", 50)
+		if page < 1 {
+			page = 1
+		}
+		if pageSize < 1 || pageSize > 200 {
+			pageSize = 50
+		}
+		total := len(items)
+		start := (page - 1) * pageSize
+		if start > total {
+			start = total
+		}
+		end := start + pageSize
+		if end > total {
+			end = total
+		}
+		writeJSON(w, 200, map[string]any{
+			"items": items[start:end], "total": total, "page": page, "pageSize": pageSize,
+		})
 	})
 	mux.HandleFunc("GET /api/concepts", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, s.ConceptCounts()) })
 	mux.HandleFunc("GET /api/industries", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, s.Industries()) })
 
-	// GET /api/quotes?symbols=600519.SH,000001.SZ — latest prices for one page.
+	// GET /api/quotes?symbols=600519.SH,000001.SZ — latest prices for one
+	// page. Served from the background quote cache when it is warm.
 	mux.HandleFunc("GET /api/quotes", func(w http.ResponseWriter, r *http.Request) {
 		raw := r.URL.Query().Get("symbols")
 		var symbols []string
@@ -94,6 +125,17 @@ func main() {
 			if part = strings.TrimSpace(part); part != "" {
 				symbols = append(symbols, strings.ToUpper(part))
 			}
+		}
+		if quoteCache.Ready() {
+			snap := quoteCache.Snapshot()
+			out := make([]tdx.Quote, 0, len(symbols))
+			for _, sym := range symbols {
+				if q, ok := snap[sym]; ok {
+					out = append(out, q)
+				}
+			}
+			writeJSON(w, 200, out)
+			return
 		}
 		quotes, err := source.FetchQuotes(symbols)
 		if err != nil {
@@ -301,6 +343,52 @@ func queryInt(r *http.Request, key string, fallback int) int {
 		return v
 	}
 	return fallback
+}
+
+// sortProfiles orders the browser list in place. Quote-backed keys (price,
+// changePct, amount) fall back to symbol order until the quote cache warms up.
+func sortProfiles(items []store.ProfileListItem, key string, desc bool, snap map[string]tdx.Quote) {
+	quoteVal := func(sym string, pick func(tdx.Quote) float64) float64 {
+		if q, ok := snap[sym]; ok {
+			return pick(q)
+		}
+		return -1 // rows without quotes sink in descending rankings
+	}
+	less := func(a, b store.ProfileListItem) bool { return a.Symbol < b.Symbol }
+	switch key {
+	case "name":
+		less = func(a, b store.ProfileListItem) bool { return a.Name < b.Name }
+	case "board":
+		less = func(a, b store.ProfileListItem) bool { return a.Board < b.Board }
+	case "industry":
+		less = func(a, b store.ProfileListItem) bool { return a.Industry < b.Industry }
+	case "listDate":
+		less = func(a, b store.ProfileListItem) bool { return a.ListDate < b.ListDate }
+	case "concepts":
+		less = func(a, b store.ProfileListItem) bool { return len(a.Concepts) < len(b.Concepts) }
+	case "bars":
+		less = func(a, b store.ProfileListItem) bool { return a.BarCount < b.BarCount }
+	case "price":
+		less = func(a, b store.ProfileListItem) bool {
+			return quoteVal(a.Symbol, func(q tdx.Quote) float64 { return q.Price }) < quoteVal(b.Symbol, func(q tdx.Quote) float64 { return q.Price })
+		}
+	case "changePct":
+		less = func(a, b store.ProfileListItem) bool {
+			return quoteVal(a.Symbol, func(q tdx.Quote) float64 { return q.ChangePct }) < quoteVal(b.Symbol, func(q tdx.Quote) float64 { return q.ChangePct })
+		}
+	case "amount":
+		less = func(a, b store.ProfileListItem) bool {
+			return quoteVal(a.Symbol, func(q tdx.Quote) float64 { return q.Amount }) < quoteVal(b.Symbol, func(q tdx.Quote) float64 { return q.Amount })
+		}
+	default:
+		key = "symbol"
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		if desc {
+			return less(items[j], items[i])
+		}
+		return less(items[i], items[j])
+	})
 }
 
 func listenURL(addr string) string {

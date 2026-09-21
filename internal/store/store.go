@@ -185,32 +185,25 @@ type ProfileFilter struct {
 	Industry   string
 	Concept    string
 	SyncedOnly bool // only stocks that also have local bars
-	Page, PageSize int
 }
 
-// ProfileListItem couples a profile with its local bar-series status.
+// ProfileListItem couples a profile with its local bar-series status. The
+// heavy business text is left out; the drawer fetches it via /profile.
 type ProfileListItem struct {
-	Profile
-	BarCount int `json:"barCount"`
-}
-
-// ProfilePage is one page of filtered profiles.
-type ProfilePage struct {
-	Items    []ProfileListItem `json:"items"`
-	Total    int               `json:"total"`
-	Page     int               `json:"page"`
-	PageSize int               `json:"pageSize"`
+	Symbol   string   `json:"symbol"`
+	Name     string   `json:"name"`
+	Industry string   `json:"industry"`
+	Market   string   `json:"market"`
+	Board    string   `json:"board"`
+	ListDate string   `json:"listDate"`
+	Concepts []string `json:"concepts"`
+	BarCount int      `json:"barCount"`
 }
 
 // QueryProfiles filters the in-memory profile cache (a few thousand rows, so
-// a linear scan under RLock is plenty) and returns the requested page.
-func (s *Store) QueryProfiles(f ProfileFilter) ProfilePage {
-	if f.Page < 1 {
-		f.Page = 1
-	}
-	if f.PageSize < 1 || f.PageSize > 200 {
-		f.PageSize = 50
-	}
+// a linear scan under RLock is plenty) and returns every match in symbol
+// order; sorting and paging are left to the caller.
+func (s *Store) QueryProfiles(f ProfileFilter) []ProfileListItem {
 	q := strings.ToLower(f.Q)
 
 	s.mu.RLock()
@@ -232,21 +225,15 @@ func (s *Store) QueryProfiles(f ProfileFilter) ProfilePage {
 		if f.SyncedOnly && barCount == 0 {
 			continue
 		}
-		matched = append(matched, ProfileListItem{Profile: p, BarCount: barCount})
+		matched = append(matched, ProfileListItem{
+			Symbol: p.Symbol, Name: p.Name, Industry: p.Industry, Market: p.Market,
+			Board: p.Board, ListDate: p.ListDate, Concepts: p.Concepts, BarCount: barCount,
+		})
 	}
 	s.mu.RUnlock()
 
 	sort.Slice(matched, func(i, j int) bool { return matched[i].Symbol < matched[j].Symbol })
-	total := len(matched)
-	start := (f.Page - 1) * f.PageSize
-	if start > total {
-		start = total
-	}
-	end := start + f.PageSize
-	if end > total {
-		end = total
-	}
-	return ProfilePage{Items: matched[start:end], Total: total, Page: f.Page, PageSize: f.PageSize}
+	return matched
 }
 
 // ConceptCount aggregates how many stocks each concept holds.

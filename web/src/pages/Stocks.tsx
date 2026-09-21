@@ -1,9 +1,32 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, type ConceptCount, type ProfileListItem, type ProfilePageResult, type Quote } from '../api'
+import { api, type ConceptCount, type ProfileListItem, type ProfilePageResult, type Quote, type StockProfile } from '../api'
 import { Banner, Card, CardHead, fmt, pct } from '../components/ui'
 
 const BOARDS = ['上证主板', '深证主板', '创业板', '科创板', '北交所']
+
+// Numeric ranking columns start descending; text columns start ascending.
+const NUMERIC_SORTS = new Set(['price', 'changePct', 'amount', 'concepts', 'bars'])
+
+const COLUMNS: Array<{ key: string; label: string; numeric?: boolean }> = [
+  { key: 'symbol', label: '代码' },
+  { key: 'name', label: '名称' },
+  { key: 'board', label: '板块' },
+  { key: 'industry', label: '行业' },
+  { key: 'price', label: '最新价', numeric: true },
+  { key: 'changePct', label: '涨跌幅', numeric: true },
+  { key: 'amount', label: '成交额', numeric: true },
+  { key: 'listDate', label: '上市日期' },
+  { key: 'concepts', label: '概念', numeric: true },
+  { key: 'bars', label: 'K线', numeric: true },
+]
+
+function fmtAmount(v: number): string {
+  if (!v) return '—'
+  if (v >= 1e8) return `${(v / 1e8).toFixed(1)}亿`
+  if (v >= 1e4) return `${(v / 1e4).toFixed(0)}万`
+  return v.toFixed(0)
+}
 
 interface Filters {
   q: string
@@ -19,6 +42,8 @@ export default function Stocks() {
   const navigate = useNavigate()
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
   const [appliedQ, setAppliedQ] = useState('')
+  const [sortKey, setSortKey] = useState('symbol')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [page, setPage] = useState(1)
   const [result, setResult] = useState<ProfilePageResult>({ items: [], total: 0, page: 1, pageSize: 50 })
   const [loading, setLoading] = useState(true)
@@ -27,7 +52,8 @@ export default function Stocks() {
   const [quotes, setQuotes] = useState<Record<string, Quote>>({})
   const [quotesNote, setQuotesNote] = useState('')
   const [syncing, setSyncing] = useState<Record<string, boolean>>({})
-  const [drawer, setDrawer] = useState<ProfileListItem | null>(null)
+  const [drawerItem, setDrawerItem] = useState<ProfileListItem | null>(null)
+  const [drawerProfile, setDrawerProfile] = useState<StockProfile | null>(null)
   const [feedback, setFeedback] = useState<{ text: string; kind: 'info' | 'error' | 'success' }>({ text: '', kind: 'info' })
   const loadSeq = useRef(0)
 
@@ -52,6 +78,7 @@ export default function Stocks() {
       const r = await api.profiles({
         q: appliedQ, board: filters.board, industry: filters.industry,
         concept: filters.concept, synced: filters.syncedOnly, page,
+        sort: sortKey, order: sortOrder,
       })
       if (seq === loadSeq.current) setResult(r)
     } catch (e) {
@@ -59,7 +86,7 @@ export default function Stocks() {
     } finally {
       if (seq === loadSeq.current) setLoading(false)
     }
-  }, [appliedQ, filters.board, filters.industry, filters.concept, filters.syncedOnly, page])
+  }, [appliedQ, filters.board, filters.industry, filters.concept, filters.syncedOnly, page, sortKey, sortOrder])
 
   useEffect(() => {
     load()
@@ -88,6 +115,26 @@ export default function Stocks() {
     setPage(1)
   }
 
+  const toggleSort = (key: string) => {
+    setPage(1)
+    if (sortKey === key) {
+      setSortOrder(prev => (prev === 'desc' ? 'asc' : 'desc'))
+      return
+    }
+    setSortKey(key)
+    setSortOrder(NUMERIC_SORTS.has(key) ? 'desc' : 'asc')
+  }
+
+  const openDrawer = async (item: ProfileListItem) => {
+    setDrawerItem(item)
+    setDrawerProfile(null)
+    try {
+      setDrawerProfile(await api.profile(item.symbol))
+    } catch {
+      setDrawerProfile(null)
+    }
+  }
+
   const handleSync = async (symbol: string) => {
     setSyncing(prev => ({ ...prev, [symbol]: true }))
     setFeedback({ text: `正在拉取 ${symbol} 前复权日线…`, kind: 'info' })
@@ -97,7 +144,7 @@ export default function Stocks() {
         ...prev,
         items: prev.items.map(i => i.symbol === symbol ? { ...i, barCount: r.count } : i),
       }))
-      setDrawer(prev => prev && prev.symbol === symbol ? { ...prev, barCount: r.count } : prev)
+      setDrawerItem(prev => prev && prev.symbol === symbol ? { ...prev, barCount: r.count } : prev)
       setFeedback({ text: `${symbol} 已同步 ${r.count} 根日线（${r.firstDate} ~ ${r.lastDate}）。`, kind: 'success' })
     } catch (e) {
       setFeedback({ text: `${symbol} 同步失败：${e instanceof Error ? e.message : '未知错误'}`, kind: 'error' })
@@ -108,13 +155,14 @@ export default function Stocks() {
 
   const totalPages = Math.max(1, Math.ceil(result.total / result.pageSize))
   const activeConceptCount = useMemo(() => concepts.find(c => c.concept === filters.concept)?.count, [concepts, filters.concept])
+  const sortIndicator = (key: string) => (sortKey === key ? (sortOrder === 'desc' ? ' ▼' : ' ▲') : '')
 
   return (
     <div className="page">
       <header className="page-head">
         <div>
           <h1>个股</h1>
-          <p>A股全市场浏览 · 共 {result.total} 只符合条件 · 按板块 / 行业 / 概念筛选</p>
+          <p>A股全市场浏览 · 共 {result.total} 只符合条件 · 点击列头排序</p>
         </div>
       </header>
 
@@ -182,9 +230,16 @@ export default function Stocks() {
             <table>
               <thead>
                 <tr>
-                  <th>代码</th><th>名称</th><th>板块</th><th>行业</th>
-                  <th className="num">最新价</th><th className="num">涨跌幅</th>
-                  <th>上市日期</th><th className="num">概念</th><th>K线</th><th>操作</th>
+                  {COLUMNS.map(col => (
+                    <th
+                      key={col.key}
+                      className={`sortable${col.numeric ? ' num' : ''}${sortKey === col.key ? ' sorted' : ''}`}
+                      onClick={() => toggleSort(col.key)}
+                    >
+                      {col.label}{sortIndicator(col.key)}
+                    </th>
+                  ))}
+                  <th>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -194,7 +249,7 @@ export default function Stocks() {
                     <tr key={item.symbol}>
                       <td className="mono">{item.symbol}</td>
                       <td>
-                        <button className="link-btn" onClick={() => setDrawer(item)}>
+                        <button className="link-btn" onClick={() => openDrawer(item)}>
                           {item.name || item.symbol}
                         </button>
                       </td>
@@ -204,6 +259,7 @@ export default function Stocks() {
                       <td className={`num ${q ? (q.changePct >= 0 ? 'pos' : 'neg') : ''}`}>
                         {q && q.preClose > 0 ? `${q.changePct >= 0 ? '+' : ''}${pct(q.changePct)}` : '—'}
                       </td>
+                      <td className="num">{q ? fmtAmount(q.amount) : '—'}</td>
                       <td className="muted">{item.listDate || '—'}</td>
                       <td className="num" title={item.concepts.join('、')}>{item.concepts.length || '—'}</td>
                       <td>
@@ -222,7 +278,7 @@ export default function Stocks() {
                   )
                 })}
                 {!result.items.length && (
-                  <tr><td colSpan={10} className="table-empty">没有符合条件的股票</td></tr>
+                  <tr><td colSpan={11} className="table-empty">没有符合条件的股票</td></tr>
                 )}
               </tbody>
             </table>
@@ -235,39 +291,41 @@ export default function Stocks() {
         </div>
       </Card>
 
-      {drawer && (
+      {drawerItem && (
         <>
-          <div className="drawer-overlay" onClick={() => setDrawer(null)} />
+          <div className="drawer-overlay" onClick={() => setDrawerItem(null)} />
           <aside className="drawer-panel">
             <div className="drawer-head">
               <div>
                 <div className="profile-name">
-                  {drawer.name || drawer.symbol}
-                  {drawer.board && <span className="concept-chip board-chip">{drawer.board}</span>}
+                  {drawerItem.name || drawerItem.symbol}
+                  {drawerItem.board && <span className="concept-chip board-chip">{drawerItem.board}</span>}
                 </div>
-                <div className="muted mono">{drawer.symbol}</div>
+                <div className="muted mono">{drawerItem.symbol}</div>
               </div>
-              <button className="btn ghost small" onClick={() => setDrawer(null)}>关闭</button>
+              <button className="btn ghost small" onClick={() => setDrawerItem(null)}>关闭</button>
             </div>
             <div className="drawer-body">
               <div className="profile-meta">
-                {drawer.industry && <span>{drawer.industry}</span>}
-                {drawer.listDate && <span>上市 {drawer.listDate}</span>}
-                <span>{drawer.market}</span>
-                <span>K线 {drawer.barCount > 0 ? `${drawer.barCount} 根` : '未同步'}</span>
+                {drawerItem.industry && <span>{drawerItem.industry}</span>}
+                {drawerItem.listDate && <span>上市 {drawerItem.listDate}</span>}
+                <span>{drawerItem.market}</span>
+                <span>K线 {drawerItem.barCount > 0 ? `${drawerItem.barCount} 根` : '未同步'}</span>
               </div>
-              {drawer.concepts.length > 0 && (
+              {drawerItem.concepts.length > 0 && (
                 <div className="concept-chips">
-                  {drawer.concepts.map(c => <span key={c} className="concept-chip">{c}</span>)}
+                  {drawerItem.concepts.map(c => <span key={c} className="concept-chip">{c}</span>)}
                 </div>
               )}
-              {drawer.business
-                ? <pre className="drawer-business">{drawer.business}</pre>
-                : <p className="muted">暂无业务描述（北交所股票暂无 F10 数据）。</p>}
+              {drawerProfile === null
+                ? <p className="muted">正在加载档案…</p>
+                : drawerProfile.business
+                  ? <pre className="drawer-business">{drawerProfile.business}</pre>
+                  : <p className="muted">暂无业务描述（北交所股票暂无 F10 数据）。</p>}
               <div className="drawer-actions">
-                <button className="btn primary small" onClick={() => navigate(`/?symbol=${drawer.symbol}`)}>看K线 · 回测</button>
-                <button className="btn ghost small" onClick={() => handleSync(drawer.symbol)} disabled={!!syncing[drawer.symbol]}>
-                  {syncing[drawer.symbol] ? '同步中…' : '同步日K'}
+                <button className="btn primary small" onClick={() => navigate(`/?symbol=${drawerItem.symbol}`)}>看K线 · 回测</button>
+                <button className="btn ghost small" onClick={() => handleSync(drawerItem.symbol)} disabled={!!syncing[drawerItem.symbol]}>
+                  {syncing[drawerItem.symbol] ? '同步中…' : '同步日K'}
                 </button>
               </div>
             </div>

@@ -14,6 +14,7 @@ type Quote struct {
 	Price     float64 `json:"price"`
 	PreClose  float64 `json:"preClose"`
 	ChangePct float64 `json:"changePct"`
+	Amount    float64 `json:"amount"` // 当日成交额（元）
 }
 
 // quoteBatchCap stays below the TDX protocol limit (~80 codes per request).
@@ -64,7 +65,7 @@ func (c *Client) FetchQuotes(symbols []string) ([]Quote, error) {
 		if !ok {
 			continue
 		}
-		q := Quote{Symbol: sym, Price: item.Close, PreClose: item.PreClose}
+		q := Quote{Symbol: sym, Price: item.Close, PreClose: item.PreClose, Amount: item.Amount}
 		if q.PreClose > 0 {
 			q.ChangePct = (q.Price - q.PreClose) / q.PreClose * 100
 		}

@@ -91,7 +91,14 @@ export interface StockProfile {
   updatedAt: string
 }
 
-export interface ProfileListItem extends StockProfile {
+export interface ProfileListItem {
+  symbol: string
+  name: string
+  industry: string
+  market: string
+  board: string
+  listDate: string
+  concepts: string[]
   barCount: number
 }
 
@@ -112,6 +119,7 @@ export interface Quote {
   price: number
   preClose: number
   changePct: number
+  amount: number
 }
 
 export interface ProfileQuery {
@@ -120,6 +128,8 @@ export interface ProfileQuery {
   industry?: string
   concept?: string
   synced?: boolean
+  sort?: string
+  order?: 'asc' | 'desc'
   page?: number
   pageSize?: number
 }
@@ -165,6 +175,8 @@ export const api = {
     if (query.industry) params.set('industry', query.industry)
     if (query.concept) params.set('concept', query.concept)
     if (query.synced) params.set('synced', '1')
+    if (query.sort) params.set('sort', query.sort)
+    if (query.order) params.set('order', query.order)
     params.set('page', String(query.page ?? 1))
     params.set('pageSize', String(query.pageSize ?? 50))
     return request<ProfilePageResult>(`/api/profiles?${params.toString()}`)
