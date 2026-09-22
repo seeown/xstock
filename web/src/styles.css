@@ -615,3 +615,5 @@ th.sorted { color: var(--blue); }
 .sync-state-line { margin-top: 6px; font-size: 13px; color: var(--muted); }
 .sync-state-line b { color: #9ec1ff; }
 .sync-state-line span { font-size: 12px; }
+
+.param-check { width: auto; accent-color: var(--blue); }

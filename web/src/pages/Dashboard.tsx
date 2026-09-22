@@ -30,11 +30,13 @@ interface Feedback {
 
 export default function Dashboard() {
   const [searchParams] = useSearchParams()
-  const initialSymbol = (searchParams.get('symbol') || 'DEMO').toUpperCase()
+  const initialSymbol = (searchParams.get('symbol') || '000021.SZ').toUpperCase()
 
   const [symbolInput, setSymbolInput] = useState(initialSymbol)
   const [activeSymbol, setActiveSymbol] = useState(initialSymbol)
   const [params, setParams] = useState<NParams | null>(null)
+  const [windowDays, setWindowDays] = useState(10)
+  const [allHistory, setAllHistory] = useState(false)
   const [bars, setBars] = useState<Candle[]>([])
   const [result, setResult] = useState<BacktestResult | null>(null)
   const [running, setRunning] = useState(false)
@@ -48,25 +50,28 @@ export default function Dashboard() {
       return
     }
     setRunning(true)
-    setFeedback({ text: `正在回测 ${symbol}…`, kind: 'info' })
+    const days = allHistory ? 0 : Math.max(1, windowDays || 1)
+    const scope = days > 0 ? `近 ${days} 个交易日` : '全部历史'
+    setFeedback({ text: `正在回测 ${symbol}（${scope}）…`, kind: 'info' })
     try {
-      const [bt, barData] = await Promise.all([api.backtest(symbol, p), api.bars(symbol)])
+      const [bt, barData] = await Promise.all([api.backtest(symbol, p, days), api.bars(symbol)])
       setResult(bt)
       setBars(barData)
       setActiveSymbol(symbol)
-      setFeedback({ text: `回测完成：${symbol} 发现 ${bt.signals.length} 个 N 字信号。`, kind: 'success' })
+      const windowNote = bt.windowStart ? `，区间 ${bt.windowStart} ~ ${barData[barData.length - 1]?.date ?? ''}` : ''
+      setFeedback({ text: `回测完成（${scope}${windowNote}）：${symbol} 发现 ${(bt.signals ?? []).length} 个 N 字信号。`, kind: 'success' })
     } catch (e) {
       setResult(null)
       setBars([])
       const msg = e instanceof Error ? e.message : '回测失败'
       setFeedback({
-        text: msg.includes('not found') ? `${symbol} 尚无日线数据，请先到「数据管理」同步或导入。` : msg,
+        text: msg.includes('not found') ? `${symbol} 尚无日线数据，请先到「个股」或「数据管理」同步。` : msg,
         kind: 'error',
       })
     } finally {
       setRunning(false)
     }
-  }, [])
+  }, [allHistory, windowDays])
 
   useEffect(() => {
     ;(async () => {
@@ -129,7 +134,7 @@ export default function Dashboard() {
             value={symbolInput}
             onChange={e => setSymbolInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !disabled && run(symbolInput, params)}
-            placeholder="600519.SH"
+            placeholder="000021.SZ"
             spellCheck={false}
           />
           <button className="btn ghost" onClick={handleSync} disabled={disabled}>
@@ -174,8 +179,8 @@ export default function Dashboard() {
           </Card>
 
           <Card>
-            <CardHead title="N 字候选信号" right={<span className="count-pill">{result?.signals.length ?? 0} 个</span>} />
-            {result?.signals.length ? (
+            <CardHead title="N 字候选信号" right={<span className="count-pill">{(result?.signals ?? []).length} 个</span>} />
+            {(result?.signals ?? []).length ? (
               <div className="table-wrap">
                 <table>
                   <thead>
@@ -185,7 +190,7 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {result.signals.map(s => (
+                    {(result.signals ?? []).map(s => (
                       <tr key={s.date}>
                         <td>{s.date}</td>
                         <td className="num">{fmt(s.breakoutPrice)}</td>
@@ -204,8 +209,8 @@ export default function Dashboard() {
           </Card>
 
           <Card>
-            <CardHead title="模拟交易" right={<span className="count-pill">{result?.trades.length ?? 0} 笔</span>} />
-            {result?.trades.length ? (
+            <CardHead title="模拟交易" right={<span className="count-pill">{(result?.trades ?? []).length} 笔</span>} />
+            {(result?.trades ?? []).length ? (
               <div className="table-wrap">
                 <table>
                   <thead>
@@ -215,7 +220,7 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {result.trades.map(t => (
+                    {(result.trades ?? []).map(t => (
                       <tr key={t.buyDate}>
                         <td>{t.buyDate}</td>
                         <td>{t.sellDate}</td>
@@ -269,6 +274,34 @@ export default function Dashboard() {
                 </span>
               </label>
             ))}
+            <h3 className="group-title">回测范围</h3>
+            <label className="param-field">
+              <span>时间范围</span>
+              <span className="param-input">
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={allHistory ? '' : windowDays}
+                  disabled={allHistory}
+                  placeholder="10"
+                  onChange={e => setWindowDays(Number(e.target.value))}
+                />
+                <em>交易日</em>
+              </span>
+            </label>
+            <label className="param-field">
+              <span>全部历史</span>
+              <span className="param-input">
+                <input
+                  type="checkbox"
+                  className="param-check"
+                  checked={allHistory}
+                  onChange={e => setAllHistory(e.target.checked)}
+                />
+                <em>{allHistory ? '全部历史' : `近 ${Math.max(1, windowDays || 1)} 日`}</em>
+              </span>
+            </label>
             <button className="btn primary block" onClick={() => run(symbolInput, params)} disabled={disabled}>
               {running ? '回测中…' : '运行回测'}
             </button>

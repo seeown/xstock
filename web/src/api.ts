@@ -55,6 +55,8 @@ export interface BacktestResult {
   signals: Signal[]
   trades: Trade[]
   metrics: Metrics
+  windowStart?: string
+  windowDays?: number
 }
 
 export interface StockSummary {
@@ -157,11 +159,11 @@ export const api = {
   defaultParams: () => request<NParams>('/api/params/default'),
   bars: (symbol: string) => request<Candle[]>(`/api/stocks/${encodeURIComponent(symbol)}/bars`),
   signals: (symbol: string) => request<Signal[]>(`/api/stocks/${encodeURIComponent(symbol)}/signals`),
-  backtest: (symbol: string, params: NParams) =>
+  backtest: (symbol: string, params: NParams, days = 0) =>
     request<BacktestResult>(`/api/backtests/${encodeURIComponent(symbol)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ initialCash: 100000, params }),
+      body: JSON.stringify({ initialCash: 100000, params, days }),
     }),
   sync: (symbol: string) =>
     request<SyncResult>(`/api/sync/${encodeURIComponent(symbol)}`, { method: 'POST' }),

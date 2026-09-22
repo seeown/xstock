@@ -79,15 +79,15 @@ func main() {
 		}
 	}()
 
-	// ---- Trading-day gate. The index probe occasionally returns byte-misaligned
-	// garbage during market hours; validate each probe (non-empty, newest date
-	// sane) and fall back to liquid stocks before deciding. ----
+	// ---- Trading-day gate. Stock probes are the reliable signal; TDX's
+	// index kline endpoint intermittently returns byte-misaligned data, so
+	// the index is only a last-resort candidate. ----
 	lastBars, err := st.LastBars(ctx)
 	if err != nil {
 		log.Fatalf("读取本地K线状态失败: %v", err)
 	}
 	tradingDay, gateSymbol := "", ""
-	for _, cand := range []string{indexProbeSymbol, "600519.SH", "000001.SZ", "300750.SZ"} {
+	for _, cand := range []string{"600519.SH", "000001.SZ", "300750.SZ", indexProbeSymbol} {
 		probe, err := clients[0].FetchRecentDaily(cand)
 		if err != nil || len(probe) == 0 {
 			continue
@@ -102,17 +102,21 @@ func main() {
 	if tradingDay == "" {
 		log.Fatalf("无法获得有效的交易日探测结果，本次退出（不写任何数据）")
 	}
+	// The gate symbol's freshness says nothing about the whole market (a user
+	// or the market page may have synced that one symbol); only sync_state
+	// records whether this job actually completed for the trading day.
 	if !*force {
-		if stored := lastBars[gateSymbol]; stored.Date >= tradingDay {
-			log.Printf("本地已同步至 %s（%s 无新K线，休市或已更新），本次结束", stored.Date, gateSymbol)
+		if state, err := st.GetSyncState(ctx); err == nil && state.LastTradingDay >= tradingDay {
+			log.Printf("%s 的增量更新已完成过（sync_state），本次结束", tradingDay)
 			return
 		}
 	}
 	log.Printf("交易日 %s（由 %s 探测）：开始增量同步", tradingDay, gateSymbol)
 
-	// ---- Bars: probe each stock once, append new days, re-fetch rebases. ----
-	symbols := make([]string, 0, len(st.AllProfiles())+len(tdx.IndexDefs))
-	symbols = append(symbols, indexSymbols()...)
+	// ---- Bars: probe each stock once, append new days, re-fetch rebases.
+	// Indices are deliberately excluded — TDX's index kline endpoint is
+	// unreliable; the market page restores them on demand via /api/sync. ----
+	symbols := make([]string, 0, len(st.AllProfiles()))
 	for _, p := range st.AllProfiles() {
 		symbols = append(symbols, p.Symbol)
 	}
@@ -312,14 +316,6 @@ func refreshListings(ctx context.Context, st *store.Store, c *tdx.Client, state 
 		}
 	}
 	log.Printf("列表刷新完成：新股 %d 只", state.NewListings)
-}
-
-func indexSymbols() []string {
-	var out []string
-	for _, def := range tdx.IndexDefs {
-		out = append(out, def.Symbol)
-	}
-	return out
 }
 
 func abortNow(mu *sync.Mutex, abort *bool) bool {

@@ -34,8 +34,8 @@ type NParams struct {
 }
 
 func DefaultParams() NParams {
-	return NParams{RiseDays: 10, RiseMinPct: 15, PullbackMinDays: 3, PullbackMaxDays: 10,
-		PullbackMaxPct: 8, VolumeRatioMin: 1.5, BreakoutBufferPct: 0, StopLossPct: 7,
+	return NParams{RiseDays: 1, RiseMinPct: 10, PullbackMinDays: 2, PullbackMaxDays: 5,
+		PullbackMaxPct: 8, VolumeRatioMin: 2, BreakoutBufferPct: 0, StopLossPct: 5,
 		TakeProfitPct: 15, MaxHoldDays: 20}
 }
 
@@ -74,6 +74,10 @@ type BacktestResult struct {
 	Signals []Signal `json:"signals"`
 	Trades  []Trade  `json:"trades"`
 	Metrics Metrics  `json:"metrics"`
+	// Window fields are set when the caller narrowed the result to the last
+	// N trading days (WindowResult); empty means full history.
+	WindowStart string `json:"windowStart,omitempty"`
+	WindowDays  int    `json:"windowDays,omitempty"`
 }
 
 func ValidParams(p NParams) error {
@@ -142,6 +146,9 @@ func Backtest(symbol string, bars []Candle, p NParams, initialCash float64) Back
 		initialCash = 100000
 	}
 	signals := FindNSignals(symbol, bars, p)
+	if signals == nil {
+		signals = []Signal{} // JSON: [] instead of null
+	}
 	byDate := map[string]bool{}
 	for _, s := range signals {
 		byDate[s.Date] = true
@@ -197,6 +204,52 @@ func Backtest(symbol string, bars []Candle, p NParams, initialCash float64) Back
 		result.Metrics.WinRatePct = float64(wins) / float64(len(result.Trades)) * 100
 	}
 	return result
+}
+
+// WindowResult narrows a full-history backtest to the last `days` trading
+// days: signals keep those dated inside the window, trades those bought
+// inside it, and the summary metrics are recomputed over the remaining
+// trades (compounded, same single-position rules). The strategy itself ran
+// on the whole series, so signals near the window edge still see their full
+// lookback. days <= 0 or beyond the series length keeps the result as-is.
+func WindowResult(r BacktestResult, bars []Candle, days int) BacktestResult {
+	if days <= 0 || len(bars) == 0 || days >= len(bars) {
+		return r
+	}
+	start := bars[len(bars)-days].Date
+
+	out := BacktestResult{WindowStart: start, WindowDays: days}
+	for _, s := range r.Signals {
+		if s.Date >= start {
+			out.Signals = append(out.Signals, s)
+		}
+	}
+	cash, peak, maxDD, wins := r.Metrics.InitialCash, r.Metrics.InitialCash, 0.0, 0
+	for _, t := range r.Trades {
+		if t.BuyDate < start {
+			continue
+		}
+		out.Trades = append(out.Trades, t)
+		cash *= 1 + t.ReturnPct/100
+		peak = math.Max(peak, cash)
+		maxDD = math.Max(maxDD, (peak-cash)/peak*100)
+		if t.ReturnPct > 0 {
+			wins++
+		}
+	}
+	out.Metrics = Metrics{InitialCash: r.Metrics.InitialCash, FinalCash: cash,
+		TotalReturnPct: (cash/r.Metrics.InitialCash - 1) * 100, MaxDrawdownPct: maxDD,
+		TradeCount: len(out.Trades)}
+	if out.Signals == nil {
+		out.Signals = []Signal{}
+	}
+	if out.Trades == nil {
+		out.Trades = []Trade{}
+	}
+	if len(out.Trades) > 0 {
+		out.Metrics.WinRatePct = float64(wins) / float64(len(out.Trades)) * 100
+	}
+	return out
 }
 
 // DemoBars builds the built-in DEMO series so the dashboard works offline.

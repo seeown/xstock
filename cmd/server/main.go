@@ -175,6 +175,7 @@ func main() {
 			return
 		}
 		if err := s.Replace(r.Context(), symbol, normalizeBars(bars)); err != nil {
+			log.Printf("sync %s: replace failed: %v", symbol, err)
 			errorJSON(w, 500, err.Error())
 			return
 		}
@@ -310,6 +311,7 @@ func main() {
 		req := struct {
 			Params      market.NParams `json:"params"`
 			InitialCash float64        `json:"initialCash"`
+			Days        int            `json:"days"` // >0: 只统计最近 N 个交易日；0: 全部历史
 		}{Params: market.DefaultParams(), InitialCash: 100000}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			errorJSON(w, 400, "invalid JSON")
@@ -324,7 +326,9 @@ func main() {
 			errorJSON(w, 404, "stock not found")
 			return
 		}
-		writeJSON(w, 200, market.Backtest(symbol, bars, req.Params, req.InitialCash))
+		res := market.Backtest(symbol, bars, req.Params, req.InitialCash)
+		res = market.WindowResult(res, bars, req.Days)
+		writeJSON(w, 200, res)
 	})
 
 	static, err := fs.Sub(distFS, "web/dist")
@@ -340,6 +344,15 @@ func main() {
 		if _, err := fs.Stat(static, path); err != nil {
 			// SPA history fallback: unknown non-asset paths serve index.html.
 			r.URL.Path = "/"
+			path = "index.html"
+		}
+		// Vite content-hashes asset filenames, so they can be cached
+		// forever; index.html must always revalidate or browsers keep
+		// referencing retired asset hashes after a rebuild (blank page).
+		if path == "index.html" {
+			w.Header().Set("Cache-Control", "no-cache")
+		} else {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		}
 		fileServer.ServeHTTP(w, r)
 	})

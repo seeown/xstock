@@ -2,8 +2,20 @@ package market
 
 import "testing"
 
+// demoParams matches the built-in demo series geometry (10-day rise legs),
+// independent of the user-tuned DefaultParams.
+var demoParams = NParams{RiseDays: 10, RiseMinPct: 15, PullbackMinDays: 3, PullbackMaxDays: 10,
+	PullbackMaxPct: 8, VolumeRatioMin: 1.5, BreakoutBufferPct: 0, StopLossPct: 7,
+	TakeProfitPct: 15, MaxHoldDays: 20}
+
+func TestDefaultParamsValid(t *testing.T) {
+	if err := ValidParams(DefaultParams()); err != nil {
+		t.Fatalf("default params must stay valid: %v", err)
+	}
+}
+
 func TestFindNSignalsDemo(t *testing.T) {
-	signals := FindNSignals("DEMO", DemoBars(), DefaultParams())
+	signals := FindNSignals("DEMO", DemoBars(), demoParams)
 	if len(signals) == 0 {
 		t.Fatal("expected at least one signal on the demo series")
 	}
@@ -16,11 +28,11 @@ func TestFindNSignalsDemo(t *testing.T) {
 
 func TestBacktestEntersNextOpen(t *testing.T) {
 	bars := DemoBars()
-	signals := FindNSignals("DEMO", bars, DefaultParams())
+	signals := FindNSignals("DEMO", bars, demoParams)
 	if len(signals) == 0 {
 		t.Fatal("expected a signal to anchor the trade")
 	}
-	result := Backtest("DEMO", bars, DefaultParams(), 100000)
+	result := Backtest("DEMO", bars, demoParams, 100000)
 	if len(result.Trades) == 0 {
 		t.Fatal("expected at least one trade")
 	}
