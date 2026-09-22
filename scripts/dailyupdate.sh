@@ -1,9 +1,10 @@
 #!/bin/bash
 # NStock 每日增量更新（launchd 于工作日 17:00 调用，错过时段唤醒后补跑）
-set -a; source /Users/wyf/developer/NStock/.env.produce; set +a
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+set -a; source "$REPO/.env.produce"; set +a
 export GOTOOLCHAIN=auto
 export PATH=/opt/homebrew/bin:$PATH
-cd /Users/wyf/developer/NStock || exit 1
+cd "$REPO" || exit 1
 mkdir -p logs
 LOG="logs/daily-$(date +%F).log"
 echo "===== $(date '+%F %T') 定时更新触发 =====" >> "$LOG"

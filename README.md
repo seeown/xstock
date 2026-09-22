@@ -42,11 +42,11 @@ curl -X POST http://localhost:8080/api/sync/600519.SH
 数据库连接配置在项目根目录的 `.env.produce` 文件中（不提交到 git），程序启动时读取；已在进程环境中设置的变量优先于该文件：
 
 ```bash
-PG_USER=wyf
-PG_PASSWD=password
-PG_HOST=127.0.0.1
-PG_PORT=5432
-DB_NAME=nstock
+PG_USER=<你的数据库用户名>
+PG_PASSWD=<你的数据库密码>
+PG_HOST=<数据库地址，如 127.0.0.1>
+PG_PORT=<端口，如 5432>
+DB_NAME=<库名，如 nstock>
 ```
 
 任一变量缺失时服务会拒绝启动。

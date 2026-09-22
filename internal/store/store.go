@@ -53,7 +53,7 @@ type Profile struct {
 
 // Open opens the PostgreSQL database at dsn (URL or key=value form) and loads
 // all persisted bars and profiles into memory. Example dsn:
-// "postgres://wyf:password@127.0.0.1:5432/nstock".
+// "postgres://<user>:<passwd>@<host>:<port>/<dbname>".
 func Open(ctx context.Context, dsn string) (*Store, error) {
 	return open(ctx, dsn, false)
 }
