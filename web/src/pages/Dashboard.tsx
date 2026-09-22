@@ -38,12 +38,12 @@ export default function Dashboard() {
   const [params, setParams] = useState<NParams | null>(null)
   const [windowDays, setWindowDays] = useState(10)
   const [allHistory, setAllHistory] = useState(false)
-  const [focus, setFocus] = useState<{ from: string; to: string; label: string } | null>(null)
+  const [focus, setFocus] = useState<{ from: string; to: string; label: string; trade?: Trade; signal?: Signal } | null>(null)
   // 最新K线序列的引用，供点击回调读取而不闭包旧值。
   const barsRef = useRef<Candle[]>([])
 
   // 聚焦某笔交易/信号：K线图缩放到其邻域（前 45 根覆盖上涨与回调，后 15 根看离场）。
-  const focusAt = useCallback((anchor: string, tail: string | undefined, label: string) => {
+  const focusAt = useCallback((anchor: string, tail: string | undefined, label: string, mark: { trade?: Trade; signal?: Signal }) => {
     setFocus(prev => {
       const list = barsRef.current
       if (!list.length) return prev
@@ -52,14 +52,14 @@ export default function Dashboard() {
       const endIdx = tail ? Math.max(idx, list.findIndex(b => b.date === tail)) : idx
       const from = list[Math.max(0, idx - 45)].date
       const to = list[Math.min(list.length - 1, endIdx + 15)].date
-      return { from, to, label }
+      return { from, to, label, trade: mark.trade, signal: mark.signal }
     })
     document.querySelector('.kline-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }, [])
 
   const handleMarkClick = useCallback((m: { kind: 'signal' | 'trade'; signal?: Signal; trade?: Trade }) => {
-    if (m.trade) focusAt(m.trade.buyDate, m.trade.sellDate, `${m.trade.buyDate} 买入`)
-    else if (m.signal) focusAt(m.signal.date, undefined, `${m.signal.date} 信号`)
+    if (m.trade) focusAt(m.trade.buyDate, m.trade.sellDate, `${m.trade.buyDate} 买入`, m)
+    else if (m.signal) focusAt(m.signal.date, undefined, `${m.signal.date} 信号`, m)
   }, [focusAt])
   const [bars, setBars] = useState<Candle[]>([])
   const [result, setResult] = useState<BacktestResult | null>(null)
@@ -137,6 +137,17 @@ export default function Dashboard() {
   const m = result?.metrics
   const disabled = running
 
+  const tradesList = result?.trades ?? []
+  const focusTradeIdx = focus?.trade ? Math.max(0, tradesList.findIndex(t => t.buyDate === focus.trade!.buyDate)) : -1
+  const stepTrade = (dir: number) => {
+    const list = result?.trades ?? []
+    if (!list.length) return
+    const cur = focus?.trade ? list.findIndex(t => t.buyDate === focus.trade!.buyDate) : -1
+    const next = list[Math.min(list.length - 1, Math.max(0, (cur < 0 ? 0 : cur) + dir))]
+    if (next) focusAt(next.buyDate, next.sellDate, `${next.buyDate} 买入`, { trade: next })
+  }
+
+
   return (
     <div className="page">
       <header className="page-head">
@@ -176,15 +187,51 @@ export default function Dashboard() {
               <CardHead
                 title={`${activeSymbol} 日K · 买卖点`}
                 sub="点击图上标注或下方表格行聚焦该笔交易；滚轮缩放，拖动平移"
-                right={focus ? (
-                  <span className="focus-chip">
-                    <em>{focus.label}</em>
-                    <button className="btn ghost small" onClick={() => setFocus(null)}>返回全景</button>
+                right={
+                  <span className="focus-nav">
+                    {(result?.trades ?? []).length > 1 && (
+                      <>
+                        <button className="btn ghost small" title="上一笔交易"
+                          disabled={!focus || focusTradeIdx <= 0}
+                          onClick={() => stepTrade(-1)}>‹</button>
+                        <span className="muted focus-idx">{focus ? `${focusTradeIdx + 1} / ${(result?.trades ?? []).length}` : `共 ${(result?.trades ?? []).length} 笔`}</span>
+                        <button className="btn ghost small" title="下一笔交易"
+                          disabled={!focus || focusTradeIdx >= (result?.trades ?? []).length - 1}
+                          onClick={() => stepTrade(1)}>›</button>
+                      </>
+                    )}
+                    {focus && (
+                      <span className="focus-chip">
+                        <em>{focus.label}</em>
+                        <button className="btn ghost small" onClick={() => setFocus(null)}>返回全景</button>
+                      </span>
+                    )}
                   </span>
-                ) : undefined}
+                }
               />
+              {focus ? (
+                <div className="focus-detail">
+                  {focus.trade ? (
+                    <>
+                      <span>买 <b className="pos">{focus.trade.buyPrice.toFixed(2)}</b>（{focus.trade.buyDate}）</span>
+                      <span>卖 <b className={focus.trade.returnPct >= 0 ? 'pos' : 'neg'}>{focus.trade.sellPrice.toFixed(2)}</b>（{focus.trade.sellDate}）</span>
+                      <span className={focus.trade.returnPct >= 0 ? 'pos' : 'neg'}>收益 {focus.trade.returnPct >= 0 ? '+' : ''}{focus.trade.returnPct.toFixed(2)}%</span>
+                      <span>{exitReasonText[focus.trade.exitReason] ?? focus.trade.exitReason}</span>
+                    </>
+                  ) : focus.signal ? (
+                    <>
+                      <span>突破 <b>{focus.signal.breakoutPrice.toFixed(2)}</b></span>
+                      <span>量比 {focus.signal.volumeRatio.toFixed(1)}×</span>
+                      <span>段内涨 {focus.signal.risePct.toFixed(1)}%</span>
+                      <span>回调 {focus.signal.pullbackPct.toFixed(1)}%</span>
+                      <span className={focus.signal.dayChangePct >= 0 ? 'pos' : 'neg'}>当日 {focus.signal.dayChangePct >= 0 ? '+' : ''}{focus.signal.dayChangePct.toFixed(2)}%</span>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
               <KlineChart bars={bars} signals={result?.signals ?? []} trades={result?.trades ?? []}
-                focus={focus ? { from: focus.from, to: focus.to } : null} onMarkClick={handleMarkClick} />
+                focus={focus ? { from: focus.from, to: focus.to } : null}
+                onMarkClick={handleMarkClick} onResetFocus={() => setFocus(null)} />
             </Card>
           )}
 
@@ -211,7 +258,7 @@ export default function Dashboard() {
                   <tbody>
                     {(result?.signals ?? []).map(s => (
                       <tr key={s.date} className="row-clickable" title="点击在K线图中聚焦这个信号"
-                          onClick={() => focusAt(s.date, undefined, `${s.date} 信号`)}>
+                          onClick={() => focusAt(s.date, undefined, `${s.date} 信号`, { signal: s })}>
                         <td>{s.date}</td>
                         <td className="num">{fmt(s.breakoutPrice)}</td>
                         <td className="num pos">{pct(s.risePct)}</td>
@@ -252,7 +299,7 @@ export default function Dashboard() {
                   <tbody>
                     {(result?.trades ?? []).map(t => (
                       <tr key={t.buyDate} className="row-clickable" title="点击在K线图中聚焦这笔交易"
-                          onClick={() => focusAt(t.buyDate, t.sellDate, `${t.buyDate} 买入`)}>
+                          onClick={() => focusAt(t.buyDate, t.sellDate, `${t.buyDate} 买入`, { trade: t })}>
                         <td>{t.buyDate}</td>
                         <td>{t.sellDate}</td>
                         <td className="num">{fmt(t.buyPrice)}</td>

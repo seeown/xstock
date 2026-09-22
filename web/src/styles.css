@@ -92,7 +92,7 @@ body {
 
 /* ---------- Main / page ---------- */
 .main { min-width: 0; }
-.page { padding: 28px 34px 48px; max-width: 1440px; }
+.page { padding: 28px 34px 48px; }
 
 .page-head {
   display: flex; align-items: flex-end; justify-content: space-between;
@@ -624,3 +624,32 @@ th.sorted { color: var(--blue); }
 .row-clickable:hover td { background: rgba(79, 140, 255, 0.06); }
 .focus-chip { display: inline-flex; align-items: center; gap: 8px; }
 .focus-chip em { font-style: normal; font-size: 12.5px; color: #9ec1ff; }
+
+.kline-tip {
+  position: fixed; z-index: 60;
+  display: flex; flex-direction: column; gap: 3px;
+  background: rgba(10, 18, 34, 0.96);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 12.5px; color: var(--ink);
+  pointer-events: none;
+  box-shadow: var(--shadow);
+  max-width: 260px;
+}
+.kline-tip b { font-size: 13px; }
+.kline-tip span { color: var(--muted); }
+.kline-tip em { font-style: normal; color: var(--faint); font-size: 11.5px; margin-top: 4px; }
+.kline-tip .pos { color: var(--red); }
+.kline-tip .neg { color: var(--green); }
+
+.focus-detail {
+  display: flex; flex-wrap: wrap; gap: 14px;
+  padding: 8px 0 10px; margin-bottom: 10px;
+  border-bottom: 1px dashed var(--line-strong);
+  font-size: 13px; color: var(--muted);
+}
+.focus-detail b { color: var(--ink); font-weight: 600; }
+
+.focus-nav { display: inline-flex; align-items: center; gap: 6px; }
+.focus-idx { font-size: 12px; min-width: 48px; text-align: center; }

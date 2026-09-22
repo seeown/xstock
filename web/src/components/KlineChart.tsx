@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react'
-import { init, dispose } from 'klinecharts'
+import { useEffect, useRef, useState } from 'react'
+import { init, dispose, registerOverlay } from 'klinecharts'
 import type { Chart, KLineData } from 'klinecharts'
 import type { Candle, Signal, Trade } from '../api'
+import { exitReasonText } from './ui'
 
 export const MA_PERIODS = [5, 10, 20, 30, 60, 250]
 
@@ -25,6 +26,109 @@ export function computeMA(bars: Candle[], period: number): Array<number | null> 
   return out
 }
 
+// nsmark: 全景模式下的极简买卖标记——纯色小三角锚定在 K 线高低价上，
+// 无文字无引导线（simpleAnnotation 的文字在全景下会糊成一片）。
+// extendData: { dir: 1 买(▲在线下) | -1 卖(▼在线上), color }
+// nsevent: 聚焦模式的事件标记——买卖日蜡烛描边高亮 + 紧贴K线的三角与
+// 小字（B 价 / S 收益% / 信），全部锚定在蜡烛高低价上，不飘到图表顶部。
+// extendData: { kind: 'buy'|'sell'|'signal', color, label, ring }
+let nseventRegistered = false
+function ensureNsEvent() {
+  if (nseventRegistered) return
+  nseventRegistered = true
+  registerOverlay({
+    name: 'nsevent',
+    totalStep: 1,
+    createPointFigures: ({ overlay, coordinates }) => {
+      const c = coordinates[0]
+      const c1 = coordinates[1]
+      const d = overlay.extendData as { kind: string; color: string; label: string; ring: string } | undefined
+      if (!c || !d) return []
+      const figures: Array<{ type: string; attrs: unknown; styles?: unknown; ignoreEvent?: boolean }> = []
+      if ((d.kind === 'buy' || d.kind === 'sell') && c1) {
+        // 事件日蜡烛描边：竖框覆盖当根K线高低价范围
+        const y = Math.min(c.y, c1.y)
+        const h = Math.max(2, Math.abs(c.y - c1.y))
+        figures.push({
+          type: 'rect',
+          attrs: { x: c.x - 6, y, width: 12, height: h },
+          styles: { style: 'stroke', color: d.ring, borderSize: 1.5 },
+          ignoreEvent: true,
+        })
+      }
+      const gap = 4
+      if (d.kind === 'buy') {
+        // 单个紧贴K线下方的 B 徽章（白字，粗一点）
+        figures.push({
+          type: 'text',
+          attrs: { x: c.x, y: c.y + gap, text: 'B', align: 'center', baseline: 'top' },
+          styles: { color: d.color, size: 13, weight: 'bold' },
+          ignoreEvent: true,
+        })
+      } else if (d.kind === 'sell') {
+        // 单个紧贴K线上方的 S 徽章
+        figures.push({
+          type: 'text',
+          attrs: { x: c.x, y: c.y - gap, text: 'S', align: 'center', baseline: 'bottom' },
+          styles: { color: d.color, size: 13, weight: 'bold' },
+          ignoreEvent: true,
+        })
+      } else {
+        // 信号日：金色小菱形 + 「信」
+        const cy = c.y + gap + size
+        figures.push({
+          type: 'polygon',
+          attrs: { coordinates: [
+            { x: c.x, y: cy - size }, { x: c.x + size, y: cy },
+            { x: c.x, y: cy + size }, { x: c.x - size, y: cy },
+          ] },
+          styles: { style: 'fill', color: d.color },
+          ignoreEvent: true,
+        })
+        if (d.label) {
+          figures.push({
+            type: 'text',
+            attrs: { x: c.x, y: cy + size + 10, text: d.label, align: 'center', baseline: 'top' },
+            styles: { color: d.color, size: 10 },
+            ignoreEvent: true,
+          })
+        }
+      }
+      return figures
+    },
+  })
+}
+
+let nsmarkRegistered = false
+function ensureNsMark() {
+  if (nsmarkRegistered) return
+  nsmarkRegistered = true
+  registerOverlay({
+    name: 'nsmark',
+    totalStep: 1,
+    createPointFigures: ({ overlay, coordinates }) => {
+      const c = coordinates[0]
+      const d = overlay.extendData as { dir: number; color: string } | undefined
+      if (!c || !d) return []
+      const size = 6, gap = 3
+      const tri = d.dir === 1
+        ? [
+            { x: c.x, y: c.y + gap + size * 2 },
+            { x: c.x - size, y: c.y + gap },
+            { x: c.x + size, y: c.y + gap },
+          ]
+        : [
+            { x: c.x, y: c.y - gap - size * 2 },
+            { x: c.x - size, y: c.y - gap },
+            { x: c.x + size, y: c.y - gap },
+          ]
+      return [
+        { type: 'polygon', attrs: { coordinates: tri }, styles: { style: 'fill', color: d.color } },
+      ]
+    },
+  })
+}
+
 export interface ChartMark {
   kind: 'signal' | 'trade'
   signal?: Signal
@@ -46,17 +150,19 @@ export interface FocusRange {
 // neighbourhood. In panorama only 买/卖 marks are drawn (信 marks are too
 // dense at full zoom); once focused, signal marks join for that window.
 export default function KlineChart({
-  bars, signals, trades, focus, onMarkClick, height = 420,
+  bars, signals, trades, focus, onMarkClick, onResetFocus, height = 420,
 }: {
   bars: Candle[]
   signals?: Signal[]
   trades?: Trade[]
   focus?: FocusRange | null
   onMarkClick?: (mark: ChartMark) => void
+  onResetFocus?: () => void
   height?: number
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<Chart | null>(null)
+  const [tip, setTip] = useState<{ x: number; y: number; mark: ChartMark } | null>(null)
 
   useEffect(() => {
     const el = hostRef.current
@@ -93,10 +199,13 @@ export default function KlineChart({
           upWickColor: UP_COLOR, downWickColor: DOWN_COLOR,
         },
         priceMark: {
-          last: { upColor: UP_COLOR, downColor: DOWN_COLOR },
+          // 右侧最新价线与标签：常驻挡视线，关闭
+          last: { show: false, upColor: UP_COLOR, downColor: DOWN_COLOR },
         },
       },
       indicator: {
+        // 均线/VOL 的数值图例只在十字光标悬停时出现，平时不占画面
+        tooltip: { showRule: 'follow_cross' },
         bars: [{ style: 'fill', upColor: UP_COLOR, downColor: DOWN_COLOR }],
         lines: MA_COLORS.map(color => ({ style: 'solid', smooth: false, size: 1, dashedValue: [2, 2], color })),
       },
@@ -110,37 +219,88 @@ export default function KlineChart({
     chart.createIndicator({ name: 'MA', calcParams: MA_PERIODS, paneId: 'candle_pane' }, false)
     chart.createIndicator('VOL')
 
-    // Buy/sell annotations; clicking one lets the page focus this trade.
-    const mark = (ts: number, text: string, payload: ChartMark) => {
-      chart.createOverlay({
-        name: 'simpleAnnotation',
-        points: [{ timestamp: ts }],
-        extendData: text,
-        onClick: () => onMarkClick?.(payload),
-      })
-    }
+    // 买卖标注：聚焦时画带日期/收益的文字标注；全景只画锚定在高低价上的
+    // 小三角（买=K线下方红▲，卖=上方▼按盈亏红/绿），避免文字糊成一团。
+    // 点击任一标记都会让页面聚焦到该笔交易。
     if (focus) {
-      for (const s of signals ?? []) {
-        mark(Date.parse(s.date), `信 ${s.date.slice(5)}`, { kind: 'signal', signal: s })
+      ensureNsEvent()
+      const barByDate = new Map(bars.map(b => [b.date, b]))
+      const event = (pts: Array<{ timestamp: number; value: number }>, data: { kind: string; color: string; label: string; ring: string }, payload: ChartMark) => {
+        chart.createOverlay({
+          name: 'nsevent',
+          points: pts,
+          extendData: data,
+          onClick: () => onMarkClick?.(payload),
+          onMouseEnter: e => setTip({ x: e.pageX ?? 0, y: e.pageY ?? 0, mark: payload }),
+          onMouseLeave: () => setTip(null),
+        })
       }
-    }
-    for (const t of trades ?? []) {
-      const ret = t.returnPct >= 0 ? `+${t.returnPct.toFixed(1)}%` : `${t.returnPct.toFixed(1)}%`
-      mark(Date.parse(t.buyDate), `买 ${t.buyDate.slice(5)}`, { kind: 'trade', trade: t })
-      mark(Date.parse(t.sellDate), `卖${ret}`, { kind: 'trade', trade: t })
+      for (const g of signals ?? []) {
+        const bar = barByDate.get(g.date)
+        if (!bar) continue
+        const ts = Date.parse(g.date)
+        event([{ timestamp: ts, value: bar.low }], { kind: 'signal', color: '#f5b544', label: '', ring: '#f5b544' }, { kind: 'signal', signal: g })
+      }
+      for (const t of trades ?? []) {
+        const buyBar = barByDate.get(t.buyDate)
+        const sellBar = barByDate.get(t.sellDate)
+        const sellColor = '#ffffff'
+        if (buyBar) {
+          const ts = Date.parse(t.buyDate)
+          event(
+            [{ timestamp: ts, value: buyBar.low }, { timestamp: ts, value: buyBar.high }],
+            { kind: 'buy', color: '#ffffff', label: 'B', ring: '#ffffff' },
+            { kind: 'trade', trade: t },
+          )
+        }
+        if (sellBar) {
+          const ts = Date.parse(t.sellDate)
+          event(
+            [{ timestamp: ts, value: sellBar.low }, { timestamp: ts, value: sellBar.high }],
+            { kind: 'sell', color: sellColor, label: 'S', ring: sellColor },
+            { kind: 'trade', trade: t },
+          )
+        }
+      }
+    } else {
+      ensureNsMark()
+      const barByDate = new Map(bars.map(b => [b.date, b]))
+      const triMark = (date: string, dir: number, color: string, payload: ChartMark) => {
+        const bar = barByDate.get(date)
+        if (!bar) return
+        chart.createOverlay({
+          name: 'nsmark',
+          points: [{ timestamp: Date.parse(date), value: dir === 1 ? bar.low : bar.high }],
+          extendData: { dir, color },
+          onClick: () => onMarkClick?.(payload),
+          onMouseEnter: e => setTip({ x: e.pageX ?? 0, y: e.pageY ?? 0, mark: payload }),
+          onMouseLeave: () => setTip(null),
+        })
+      }
+      for (const t of trades ?? []) {
+        triMark(t.buyDate, 1, '#f4577a', { kind: 'trade', trade: t })
+        triMark(t.sellDate, -1, t.returnPct >= 0 ? '#f4577a' : '#22c58b', { kind: 'trade', trade: t })
+      }
     }
 
     if (focus) {
       applyFocus(chart, el, bars, focus)
     }
 
+    // 聚焦态下双击图表任意处返回全景。
+    const onDbl = () => {
+      if (focus) onResetFocus?.()
+    }
+    el.addEventListener('dblclick', onDbl)
+
     return () => {
+      el.removeEventListener('dblclick', onDbl)
       chartRef.current = null
       dispose(el)
     }
     // onMarkClick must be a stable callback (useCallback) at the call site,
     // otherwise the chart rebuilds on every parent render.
-  }, [bars, signals, trades, focus, onMarkClick])
+  }, [bars, signals, trades, focus, onMarkClick, onResetFocus])
 
   if (!bars.length) {
     return (
@@ -153,6 +313,40 @@ export default function KlineChart({
   return (
     <div className="kline-wrap" style={{ height }}>
       <div ref={hostRef} style={{ width: '100%', height: '100%' }} />
+      {tip && (
+        <div className="kline-tip" style={{ left: tip.x + 14, top: tip.y - 8 }}>
+          {tip.mark.kind === 'trade' && tip.mark.trade
+            ? (() => {
+                const t = tip.mark.trade
+                return (
+                  <>
+                    <b>{t.buyDate} 买入 @{t.buyPrice.toFixed(2)}</b>
+                    <span>卖出 {t.sellDate} @{t.sellPrice.toFixed(2)}</span>
+                    <span className={t.returnPct >= 0 ? 'pos' : 'neg'}>
+                      收益 {t.returnPct >= 0 ? '+' : ''}{t.returnPct.toFixed(2)}% · {exitReasonText[t.exitReason] ?? t.exitReason}
+                    </span>
+                    <em>点击放大到该笔交易 · 双击图面返回全景</em>
+                  </>
+                )
+              })()
+            : tip.mark.signal
+              ? (() => {
+                  const g = tip.mark.signal
+                  return (
+                    <>
+                      <b>{g.date} N 字信号</b>
+                      <span>突破 {g.breakoutPrice.toFixed(2)} · 量比 {g.volumeRatio.toFixed(1)}×</span>
+                      <span>段内涨 {g.risePct.toFixed(1)}% · 回调 {g.pullbackPct.toFixed(1)}%</span>
+                      <span className={g.dayChangePct >= 0 ? 'pos' : 'neg'}>
+                        当日 {g.dayChangePct >= 0 ? '+' : ''}{g.dayChangePct.toFixed(2)}%
+                      </span>
+                      <em>点击放大到该信号 · 双击图面返回全景</em>
+                    </>
+                  )
+                })()
+              : null}
+        </div>
+      )}
     </div>
   )
 }
