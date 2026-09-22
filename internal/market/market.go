@@ -27,6 +27,9 @@ type NParams struct {
 	PullbackMaxDays   int     `json:"pullbackMaxDays"`
 	PullbackMaxPct    float64 `json:"pullbackMaxPct"`
 	VolumeRatioMin    float64 `json:"volumeRatioMin"`
+	// PullbackVolRatioMax caps pullback avg volume as a fraction of the
+	// rising leg's avg volume (0.8 = 回调均量须缩到上涨均量的 80% 以下).
+	PullbackVolRatioMax float64 `json:"pullbackVolRatioMax"`
 	BreakoutBufferPct float64 `json:"breakoutBufferPct"`
 	StopLossPct       float64 `json:"stopLossPct"`
 	TakeProfitPct     float64 `json:"takeProfitPct"`
@@ -35,8 +38,8 @@ type NParams struct {
 
 func DefaultParams() NParams {
 	return NParams{RiseDays: 1, RiseMinPct: 10, PullbackMinDays: 2, PullbackMaxDays: 5,
-		PullbackMaxPct: 8, VolumeRatioMin: 2, BreakoutBufferPct: 0, StopLossPct: 5,
-		TakeProfitPct: 15, MaxHoldDays: 20}
+		PullbackMaxPct: 8, VolumeRatioMin: 2, PullbackVolRatioMax: 0.9, BreakoutBufferPct: 0,
+		StopLossPct: 5, TakeProfitPct: 15, MaxHoldDays: 20}
 }
 
 type Signal struct {
@@ -85,6 +88,7 @@ type BacktestResult struct {
 func ValidParams(p NParams) error {
 	if p.RiseDays < 1 || p.PullbackMinDays < 1 || p.PullbackMaxDays < p.PullbackMinDays ||
 		p.RiseMinPct <= 0 || p.PullbackMaxPct <= 0 || p.VolumeRatioMin <= 0 ||
+		p.PullbackVolRatioMax <= 0 || p.PullbackVolRatioMax > 1 ||
 		p.StopLossPct <= 0 || p.TakeProfitPct <= 0 || p.MaxHoldDays < 1 {
 		return errInvalidParams
 	}
@@ -126,9 +130,9 @@ func FindNSignals(symbol string, bars []Candle, p NParams) []Signal {
 				continue
 			}
 			avgRiseVol, avgPullVol := riseVol/float64(p.RiseDays), pullVol/float64(pullDays)
-			if avgPullVol >= avgRiseVol {
+			if avgRiseVol > 0 && avgPullVol >= avgRiseVol*p.PullbackVolRatioMax {
 				continue
-			} // pullback must contract
+			} // pullback volume must contract below the configured fraction
 			volumeRatio := bars[breakout].Volume / avgPullVol
 			requiredBreakout := priorHigh * (1 + p.BreakoutBufferPct/100)
 			if bars[breakout].Close < requiredBreakout || volumeRatio < p.VolumeRatioMin {

@@ -5,8 +5,8 @@ import "testing"
 // demoParams matches the built-in demo series geometry (10-day rise legs),
 // independent of the user-tuned DefaultParams.
 var demoParams = NParams{RiseDays: 10, RiseMinPct: 15, PullbackMinDays: 3, PullbackMaxDays: 10,
-	PullbackMaxPct: 8, VolumeRatioMin: 1.5, BreakoutBufferPct: 0, StopLossPct: 7,
-	TakeProfitPct: 15, MaxHoldDays: 20}
+	PullbackMaxPct: 8, VolumeRatioMin: 1.5, PullbackVolRatioMax: 1, BreakoutBufferPct: 0,
+	StopLossPct: 7, TakeProfitPct: 15, MaxHoldDays: 20}
 
 func TestDefaultParamsValid(t *testing.T) {
 	if err := ValidParams(DefaultParams()); err != nil {

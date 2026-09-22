@@ -14,6 +14,7 @@ const signalFields: Array<{ key: keyof NParams; label: string; unit: string; ste
   { key: 'pullbackMinDays', label: '最短回调', unit: '天', min: 1 },
   { key: 'pullbackMaxDays', label: '最长回调', unit: '天', min: 1 },
   { key: 'pullbackMaxPct', label: '最大回撤', unit: '%', step: 0.1, min: 0.1 },
+  { key: 'pullbackVolRatioMax', label: '回调量比', unit: '×', step: 0.05, min: 0.1 },
   { key: 'volumeRatioMin', label: '突破量比', unit: '×', step: 0.1, min: 0.1 },
 ]
 
@@ -97,6 +98,8 @@ export default function Dashboard() {
     }
   }, [allHistory, windowDays])
 
+  // 默认参数只在挂载/切换标的时加载一次——绝不能依赖 run（它随
+  // allHistory/windowDays 变化，否则切换「全部历史」会重置用户改过的参数）。
   useEffect(() => {
     ;(async () => {
       try {
@@ -107,7 +110,20 @@ export default function Dashboard() {
         setFeedback({ text: '无法连接后端服务。', kind: 'error' })
       }
     })()
-  }, [initialSymbol, run])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSymbol])
+
+  // 「全部历史」开关切换时用当前参数立即重跑（首跑由上面的初始化完成；
+  // 时间范围天数的修改与参数一样，点「运行回测」生效）。
+  const scopeBooted = useRef(false)
+  useEffect(() => {
+    if (!scopeBooted.current) {
+      scopeBooted.current = true
+      return
+    }
+    if (params) run(activeSymbol, params)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allHistory])
 
 
   if (!params) {

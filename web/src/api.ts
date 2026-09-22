@@ -13,6 +13,7 @@ export interface NParams {
   pullbackMinDays: number
   pullbackMaxDays: number
   pullbackMaxPct: number
+  pullbackVolRatioMax: number
   volumeRatioMin: number
   breakoutBufferPct: number
   stopLossPct: number
