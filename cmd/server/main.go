@@ -48,7 +48,9 @@ func main() {
 	}
 	addr := getenv("NSTOCK_ADDR", ":8080")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// Loading the full market's bars (16M+ rows) into the cache can take a
+	// few minutes after a bulk import; keep a generous hard cap.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	s, err := store.Open(ctx, dsn)
 	cancel()
 	if err != nil {

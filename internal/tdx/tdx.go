@@ -2,9 +2,11 @@
 package tdx
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/bensema/gotdx"
 	"github.com/bensema/gotdx/proto"
@@ -21,14 +23,26 @@ type Client struct {
 	concepts *conceptIndex // concept block cache, see profile.go
 }
 
-func New() *Client {
-	hosts := gotdx.MainHostAddresses()
+func New() *Client { return NewRotated(0) }
+
+// NewRotated builds a client whose preferred TDX host is rotated by index.
+// When one host throttles or stalls, workers pinned to different hosts keep
+// making progress instead of all hammering the same primary.
+func NewRotated(index int) *Client {
+	hosts := currentHosts()
 	opts := make([]gotdx.Option, 0, len(hosts)+1)
 	if len(hosts) > 0 {
-		opts = append(opts, gotdx.WithTCPAddress(hosts[0]))
-	}
-	if len(hosts) > 1 {
-		opts = append(opts, gotdx.WithTCPAddressPool(hosts[1:]...))
+		primary := hosts[index%len(hosts)]
+		opts = append(opts, gotdx.WithTCPAddress(primary))
+		pool := make([]string, 0, len(hosts)-1)
+		for _, h := range hosts {
+			if h != primary {
+				pool = append(pool, h)
+			}
+		}
+		if len(pool) > 0 {
+			opts = append(opts, gotdx.WithTCPAddressPool(pool...))
+		}
 	}
 	opts = append(opts, gotdx.WithTimeoutSec(8))
 	return &Client{client: gotdx.New(opts...)}
@@ -40,6 +54,32 @@ func (c *Client) Close() error {
 	return c.client.Disconnect()
 }
 
+// ErrClientWedged means a Connect() handshake hung past its watchdog; gotdx's
+// handshake read has no deadline, so the caller must abandon this client
+// (its mutex stays held by the stuck goroutine) and use a fresh one.
+var ErrClientWedged = errors.New("tdx 握手挂起，客户端已报废，需更换连接")
+
+// connectWatchdog runs Connect under a hard cap since gotdx's handshake read
+// blocks forever against a server that accepts TCP but never answers.
+func (c *Client) connectWatchdog() error {
+	ch := make(chan error, 1)
+	go func() {
+		_, err := c.client.Connect()
+		ch <- err
+	}()
+	select {
+	case err := <-ch:
+		return err
+	case <-time.After(8 * time.Second):
+		return ErrClientWedged
+	}
+}
+
+// klinePage is the per-request page size for full-history downloads.
+// gotdx's StockFullKLine pages by only 20 bars (150+ requests for a typical
+// stock); 600 is what gotdx's own high-volume methods use and TDX accepts.
+const klinePage = 600
+
 // FetchDailyQFQ downloads the full daily history (forward-adjusted, 前复权)
 // for a symbol like 600519.SH or 000001.SZ. The whole series is re-downloaded
 // on purpose: QFQ prices are rebased whenever a new dividend occurs, so
@@ -49,23 +89,41 @@ func (c *Client) FetchDailyQFQ(symbol string) ([]market.Candle, error) {
 	if err != nil {
 		return nil, err
 	}
-	if mkt != types.MarketSH && mkt != types.MarketSZ {
-		return nil, fmt.Errorf("仅支持沪市(.SH)或深市(.SZ)代码，例如 600519.SH")
+	if mkt != types.MarketSH && mkt != types.MarketSZ && mkt != types.MarketBJ {
+		return nil, fmt.Errorf("仅支持沪深北代码，例如 600519.SH")
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// StockFullKLine calls f on every bar; returning false keeps pagination
-	// going until the earliest available bar is reached.
-	bars, err := c.client.StockFullKLine(types.KLINE_TYPE_DAILY, mkt.Uint8(), code, 1, types.AdjustQFQ,
-		func(proto.SecurityBar) bool { return false })
-	if err != nil {
-		return nil, fmt.Errorf("通达信行情拉取失败: %w", err)
+
+	var raw []proto.SecurityBar
+	for start := uint16(0); ; start += klinePage {
+		page, err := c.client.GetKLine(types.KLINE_TYPE_DAILY, mkt.Uint8(), code, start, klinePage, 1, types.AdjustQFQ)
+		if err != nil {
+			// Cold or dropped connection: re-establish once and retry the page.
+			if cerr := c.connectWatchdog(); cerr != nil {
+				return nil, cerr
+			}
+			page, err = c.client.GetKLine(types.KLINE_TYPE_DAILY, mkt.Uint8(), code, start, klinePage, 1, types.AdjustQFQ)
+			if err != nil {
+				return nil, fmt.Errorf("通达信行情拉取失败: %w", err)
+			}
+		}
+		// TDX answers Count=65535 (-1) with an empty list for symbols it has
+		// no QFQ data for; an empty page or a short page ends pagination, and
+		// the wrap guard keeps start from cycling forever past uint16 range.
+		if len(page.List) == 0 {
+			break
+		}
+		raw = append(raw, page.List...)
+		if int(page.Count) < klinePage || start > 65535-klinePage {
+			break
+		}
 	}
 
-	out := make([]market.Candle, 0, len(bars))
+	out := make([]market.Candle, 0, len(raw))
 	seen := map[string]bool{}
-	for _, b := range bars {
+	for _, b := range raw {
 		if b.Close <= 0 || b.Open <= 0 {
 			continue // placeholder rows before IPO
 		}

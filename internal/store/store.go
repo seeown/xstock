@@ -22,6 +22,10 @@ type Store struct {
 	mu       sync.RWMutex
 	bars     map[string][]market.Candle
 	profiles map[string]Profile
+
+	// lean disables the in-memory bar mirror; bulk tools write thousands of
+	// series and would otherwise hold the whole market (~GBs) in RAM.
+	lean bool
 }
 
 // SymbolInfo describes one cached symbol series for the data-management page.
@@ -47,9 +51,19 @@ type Profile struct {
 }
 
 // Open opens the PostgreSQL database at dsn (URL or key=value form) and loads
-// all persisted bars into memory. Example dsn:
+// all persisted bars and profiles into memory. Example dsn:
 // "postgres://wyf:password@127.0.0.1:5432/nstock".
 func Open(ctx context.Context, dsn string) (*Store, error) {
+	return open(ctx, dsn, false)
+}
+
+// OpenLean opens the store for bulk writing: profiles are mirrored as usual,
+// but bar series are neither loaded at start nor mirrored on Replace.
+func OpenLean(ctx context.Context, dsn string) (*Store, error) {
+	return open(ctx, dsn, true)
+}
+
+func open(ctx context.Context, dsn string, lean bool) (*Store, error) {
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open postgres: %w", err)
@@ -93,7 +107,14 @@ func Open(ctx context.Context, dsn string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("create stock_concept table: %w", err)
 	}
-	s := &Store{db: db, bars: map[string][]market.Candle{}, profiles: map[string]Profile{}}
+	s := &Store{db: db, lean: lean, bars: map[string][]market.Candle{}, profiles: map[string]Profile{}}
+	if lean {
+		if err := s.loadProfiles(ctx); err != nil {
+			db.Close()
+			return nil, err
+		}
+		return s, nil
+	}
 	if err := s.loadAll(ctx); err != nil {
 		db.Close()
 		return nil, err
@@ -347,10 +368,31 @@ func (s *Store) Replace(ctx context.Context, symbol string, bars []market.Candle
 		return fmt.Errorf("commit: %w", err)
 	}
 
-	s.mu.Lock()
-	s.bars[symbol] = bars
-	s.mu.Unlock()
+	if !s.lean {
+		s.mu.Lock()
+		s.bars[symbol] = bars
+		s.mu.Unlock()
+	}
 	return nil
+}
+
+// BarSymbols returns every symbol that already has persisted bars, for
+// resumable bulk syncs.
+func (s *Store) BarSymbols(ctx context.Context) (map[string]bool, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT symbol FROM bars`)
+	if err != nil {
+		return nil, fmt.Errorf("query bar symbols: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var sym string
+		if err := rows.Scan(&sym); err != nil {
+			return nil, err
+		}
+		out[sym] = true
+	}
+	return out, rows.Err()
 }
 
 // SaveProfile upserts one stock's metadata and atomically swaps its concept
