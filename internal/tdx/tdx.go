@@ -75,6 +75,64 @@ func (c *Client) connectWatchdog() error {
 	}
 }
 
+// FetchRecentDaily fetches just the newest page of daily QFQ bars (up to 600,
+// ≈2.5 years) in a single request — the daily updater's probe. The page itself
+// carries any new trading days, so callers can append straight from it.
+func (c *Client) FetchRecentDaily(symbol string) ([]market.Candle, error) {
+	mkt, code, err := types.DetectMarket(symbol)
+	if err != nil {
+		return nil, err
+	}
+	if mkt != types.MarketSH && mkt != types.MarketSZ && mkt != types.MarketBJ {
+		return nil, fmt.Errorf("仅支持沪深北代码，例如 600519.SH")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	page, err := c.client.GetKLine(types.KLINE_TYPE_DAILY, mkt.Uint8(), code, 0, klinePage, 1, types.AdjustQFQ)
+	if err != nil {
+		if cerr := c.connectWatchdog(); cerr != nil {
+			return nil, cerr
+		}
+		page, err = c.client.GetKLine(types.KLINE_TYPE_DAILY, mkt.Uint8(), code, 0, klinePage, 1, types.AdjustQFQ)
+		if err != nil {
+			return nil, fmt.Errorf("通达信行情拉取失败: %w", err)
+		}
+	}
+	return candlesFromBars(page.List), nil
+}
+
+// candlesFromBars filters placeholder/corrupt rows, dedupes by date and sorts
+// ascending. Servers occasionally return byte-misaligned garbage (dates like
+// 9013 or 199011, negative prices); the sanity bounds drop all of it.
+func candlesFromBars(raw []proto.SecurityBar) []market.Candle {
+	const minSaneDate, maxSaneDate = "1991-01-01", "2100-01-01"
+	out := make([]market.Candle, 0, len(raw))
+	seen := map[string]bool{}
+	for _, b := range raw {
+		if b.Close <= 0 || b.Open <= 0 {
+			continue // placeholder rows before IPO
+		}
+		date := b.DateTime.Format("2006-01-02")
+		if date < minSaneDate || date > maxSaneDate {
+			continue // misaligned garbage
+		}
+		if seen[date] {
+			continue
+		}
+		seen[date] = true
+		out = append(out, market.Candle{
+			Date:   date,
+			Open:   b.Open,
+			High:   b.High,
+			Low:    b.Low,
+			Close:  b.Close,
+			Volume: b.Vol,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Date < out[j].Date })
+	return out
+}
+
 // klinePage is the per-request page size for full-history downloads.
 // gotdx's StockFullKLine pages by only 20 bars (150+ requests for a typical
 // stock); 600 is what gotdx's own high-volume methods use and TDX accepts.
@@ -121,27 +179,7 @@ func (c *Client) FetchDailyQFQ(symbol string) ([]market.Candle, error) {
 		}
 	}
 
-	out := make([]market.Candle, 0, len(raw))
-	seen := map[string]bool{}
-	for _, b := range raw {
-		if b.Close <= 0 || b.Open <= 0 {
-			continue // placeholder rows before IPO
-		}
-		date := b.DateTime.Format("2006-01-02")
-		if seen[date] {
-			continue
-		}
-		seen[date] = true
-		out = append(out, market.Candle{
-			Date:   date,
-			Open:   b.Open,
-			High:   b.High,
-			Low:    b.Low,
-			Close:  b.Close,
-			Volume: b.Vol,
-		})
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Date < out[j].Date })
+	out := candlesFromBars(raw)
 	if len(out) == 0 {
 		return nil, fmt.Errorf("未获取到 %s 的日K数据", symbol)
 	}

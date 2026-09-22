@@ -5,6 +5,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
@@ -107,6 +108,18 @@ func open(ctx context.Context, dsn string, lean bool) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("create stock_concept table: %w", err)
 	}
+	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS sync_state (
+		id INT PRIMARY KEY,
+		last_run TIMESTAMPTZ NOT NULL DEFAULT now(),
+		last_trading_day TEXT NOT NULL DEFAULT '',
+		stocks_probed INT NOT NULL DEFAULT 0,
+		bars_appended INT NOT NULL DEFAULT 0,
+		full_refetch INT NOT NULL DEFAULT 0,
+		new_listings INT NOT NULL DEFAULT 0
+	)`); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("create sync_state table: %w", err)
+	}
 	s := &Store{db: db, lean: lean, bars: map[string][]market.Candle{}, profiles: map[string]Profile{}}
 	if lean {
 		if err := s.loadProfiles(ctx); err != nil {
@@ -125,26 +138,67 @@ func open(ctx context.Context, dsn string, lean bool) (*Store, error) {
 func (s *Store) Close() error { return s.db.Close() }
 
 func (s *Store) loadAll(ctx context.Context) error {
+	bars, err := s.loadBars(ctx)
+	if err != nil {
+		return err
+	}
+	profiles := map[string]Profile{}
+	if err := s.loadProfilesInto(ctx, profiles); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.bars = bars
+	s.profiles = profiles
+	s.mu.Unlock()
+	return nil
+}
+
+func (s *Store) loadBars(ctx context.Context) (map[string][]market.Candle, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT symbol, date, open, high, low, close, volume FROM bars ORDER BY symbol, date`)
 	if err != nil {
-		return fmt.Errorf("load bars: %w", err)
+		return nil, fmt.Errorf("load bars: %w", err)
 	}
 	defer rows.Close()
+	bars := map[string][]market.Candle{}
 	for rows.Next() {
 		var symbol string
 		var c market.Candle
 		if err := rows.Scan(&symbol, &c.Date, &c.Open, &c.High, &c.Low, &c.Close, &c.Volume); err != nil {
-			return fmt.Errorf("scan bar: %w", err)
+			return nil, fmt.Errorf("scan bar: %w", err)
 		}
-		s.bars[symbol] = append(s.bars[symbol], c)
+		bars[symbol] = append(bars[symbol], c)
 	}
-	if err := rows.Err(); err != nil {
+	return bars, rows.Err()
+}
+
+// Reload rebuilds both caches from PostgreSQL and swaps them in atomically;
+// readers see either the old or the new snapshot, never a partial state.
+// Used by the admin endpoint after the daily updater writes new bars.
+func (s *Store) Reload(ctx context.Context) error {
+	bars, err := s.loadBars(ctx)
+	if err != nil {
 		return err
 	}
-	return s.loadProfiles(ctx)
+	profiles := map[string]Profile{}
+	if err := s.loadProfilesInto(ctx, profiles); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.bars = bars
+	s.profiles = profiles
+	s.mu.Unlock()
+	return nil
 }
 
 func (s *Store) loadProfiles(ctx context.Context) error {
+	s.mu.Lock()
+	s.profiles = map[string]Profile{}
+	s.mu.Unlock()
+	return s.loadProfilesInto(ctx, s.profiles)
+}
+
+// loadProfilesInto fills the given map with stock_profile rows, then concepts.
+func (s *Store) loadProfilesInto(ctx context.Context, profiles map[string]Profile) error {
 	rows, err := s.db.QueryContext(ctx, `SELECT symbol, name, industry, market, board, list_date, business, to_char(updated_at, 'YYYY-MM-DD HH24:MI') FROM stock_profile ORDER BY symbol`)
 	if err != nil {
 		return fmt.Errorf("load profiles: %w", err)
@@ -156,7 +210,7 @@ func (s *Store) loadProfiles(ctx context.Context) error {
 			return fmt.Errorf("scan profile: %w", err)
 		}
 		p.Concepts = []string{}
-		s.profiles[p.Symbol] = p
+		profiles[p.Symbol] = p
 	}
 	if err := rows.Err(); err != nil {
 		return err
@@ -171,9 +225,9 @@ func (s *Store) loadProfiles(ctx context.Context) error {
 		if err := crews.Scan(&symbol, &concept); err != nil {
 			return fmt.Errorf("scan concept: %w", err)
 		}
-		if p, ok := s.profiles[symbol]; ok {
+		if p, ok := profiles[symbol]; ok {
 			p.Concepts = append(p.Concepts, concept)
-			s.profiles[symbol] = p
+			profiles[symbol] = p
 		}
 	}
 	return crews.Err()
@@ -393,6 +447,132 @@ func (s *Store) BarSymbols(ctx context.Context) (map[string]bool, error) {
 		out[sym] = true
 	}
 	return out, rows.Err()
+}
+
+// LastBars returns symbol → (latest date, that day's close) for every stored
+// series; the daily updater uses it to diff against freshly probed bars.
+func (s *Store) LastBars(ctx context.Context) (map[string]struct {
+	Date  string
+	Close float64
+}, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT ON (symbol) symbol, date, close FROM bars ORDER BY symbol, date DESC`)
+	if err != nil {
+		return nil, fmt.Errorf("query last bars: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]struct {
+		Date  string
+		Close float64
+	}{}
+	for rows.Next() {
+		var sym, date string
+		var close float64
+		if err := rows.Scan(&sym, &date, &close); err != nil {
+			return nil, err
+		}
+		out[sym] = struct {
+			Date  string
+			Close float64
+		}{date, close}
+	}
+	return out, rows.Err()
+}
+
+// AppendBars inserts only dates that do not exist yet (ON CONFLICT skip) and
+// returns how many rows were actually added. Used by the daily updater for
+// stocks that simply got new trading days without a rebase.
+func (s *Store) AppendBars(ctx context.Context, symbol string, bars []market.Candle) (int, error) {
+	if len(bars) == 0 {
+		return 0, nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO bars (symbol, date, open, high, low, close, volume)
+		VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (symbol, date) DO NOTHING`)
+	if err != nil {
+		return 0, fmt.Errorf("prepare insert: %w", err)
+	}
+	defer stmt.Close()
+	added := 0
+	for _, c := range bars {
+		res, err := stmt.ExecContext(ctx, symbol, c.Date, c.Open, c.High, c.Low, c.Close, c.Volume)
+		if err != nil {
+			return 0, fmt.Errorf("insert bar %s: %w", c.Date, err)
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			added++
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit: %w", err)
+	}
+
+	if !s.lean {
+		s.mu.Lock()
+		if existing := s.bars[symbol]; len(existing) > 0 {
+			for _, c := range bars {
+				if len(existing) == 0 || c.Date > existing[len(existing)-1].Date {
+					existing = append(existing, c)
+				}
+			}
+			s.bars[symbol] = existing
+		}
+		s.mu.Unlock()
+	}
+	return added, nil
+}
+
+// SyncState records the last successful daily incremental sync.
+type SyncState struct {
+	LastRun        string `json:"lastRun"`
+	LastTradingDay string `json:"lastTradingDay"`
+	StocksProbed   int    `json:"stocksProbed"`
+	BarsAppended   int    `json:"barsAppended"`
+	FullRefetch    int    `json:"fullRefetch"`
+	NewListings    int    `json:"newListings"`
+}
+
+// SetSyncState upserts the single-row sync bookkeeping table.
+func (s *Store) SetSyncState(ctx context.Context, st SyncState) error {
+	if _, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS sync_state (
+		id INT PRIMARY KEY,
+		last_run TIMESTAMPTZ NOT NULL DEFAULT now(),
+		last_trading_day TEXT NOT NULL DEFAULT '',
+		stocks_probed INT NOT NULL DEFAULT 0,
+		bars_appended INT NOT NULL DEFAULT 0,
+		full_refetch INT NOT NULL DEFAULT 0,
+		new_listings INT NOT NULL DEFAULT 0
+	)`); err != nil {
+		return fmt.Errorf("create sync_state: %w", err)
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO sync_state (id, last_run, last_trading_day, stocks_probed, bars_appended, full_refetch, new_listings)
+		VALUES (1, now(), $1, $2, $3, $4, $5)
+		ON CONFLICT (id) DO UPDATE SET last_run = now(), last_trading_day = EXCLUDED.last_trading_day,
+			stocks_probed = EXCLUDED.stocks_probed, bars_appended = EXCLUDED.bars_appended,
+			full_refetch = EXCLUDED.full_refetch, new_listings = EXCLUDED.new_listings`,
+		st.LastTradingDay, st.StocksProbed, st.BarsAppended, st.FullRefetch, st.NewListings)
+	return err
+}
+
+// GetSyncState reads the bookkeeping row (zero value if never synced).
+func (s *Store) GetSyncState(ctx context.Context) (SyncState, error) {
+	var st SyncState
+	var lastRun sql.NullTime
+	err := s.db.QueryRowContext(ctx, `SELECT last_run, last_trading_day, stocks_probed, bars_appended, full_refetch, new_listings FROM sync_state WHERE id = 1`).
+		Scan(&lastRun, &st.LastTradingDay, &st.StocksProbed, &st.BarsAppended, &st.FullRefetch, &st.NewListings)
+	if errors.Is(err, sql.ErrNoRows) {
+		return st, nil
+	}
+	if err != nil {
+		return st, err
+	}
+	if lastRun.Valid {
+		st.LastRun = lastRun.Time.Format("2006-01-02 15:04")
+	}
+	return st, nil
 }
 
 // SaveProfile upserts one stock's metadata and atomically swaps its concept

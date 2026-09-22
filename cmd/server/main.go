@@ -268,6 +268,25 @@ func main() {
 		writeJSON(w, 200, p)
 	})
 
+	// Hot cache refresh after the scheduled daily updater writes to PG.
+	mux.HandleFunc("POST /api/admin/reload", func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+		defer cancel()
+		if err := s.Reload(ctx); err != nil {
+			errorJSON(w, 500, err.Error())
+			return
+		}
+		writeJSON(w, 200, map[string]any{"status": "reloaded"})
+	})
+	mux.HandleFunc("GET /api/sync-state", func(w http.ResponseWriter, r *http.Request) {
+		st, err := s.GetSyncState(r.Context())
+		if err != nil {
+			errorJSON(w, 500, err.Error())
+			return
+		}
+		writeJSON(w, 200, st)
+	})
+
 	mux.HandleFunc("GET /api/stocks/{symbol}/signals", func(w http.ResponseWriter, r *http.Request) {
 		symbol := strings.ToUpper(r.PathValue("symbol"))
 		bars := s.Bars(symbol)

@@ -601,3 +601,17 @@ td.num, th.num { text-align: right; }
 th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
 th.sortable:hover { color: var(--ink); }
 th.sorted { color: var(--blue); }
+
+.sync-state-pill {
+  padding: 8px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--bg-soft);
+  font-size: 13px;
+  color: var(--ink);
+}
+.sync-state-pill span { color: var(--muted); font-size: 12px; }
+
+.sync-state-line { margin-top: 6px; font-size: 13px; color: var(--muted); }
+.sync-state-line b { color: #9ec1ff; }
+.sync-state-line span { font-size: 12px; }

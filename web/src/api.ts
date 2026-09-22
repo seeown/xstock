@@ -122,6 +122,15 @@ export interface Quote {
   amount: number
 }
 
+export interface SyncState {
+  lastRun: string
+  lastTradingDay: string
+  stocksProbed: number
+  barsAppended: number
+  fullRefetch: number
+  newListings: number
+}
+
 export interface ProfileQuery {
   q?: string
   board?: string
@@ -183,6 +192,7 @@ export const api = {
   },
   concepts: () => request<ConceptCount[]>('/api/concepts'),
   industries: () => request<string[]>('/api/industries'),
+  syncState: () => request<SyncState>('/api/sync-state'),
   quotes: (symbols: string[]) =>
     request<Quote[]>(`/api/quotes?symbols=${encodeURIComponent(symbols.join(','))}`),
 }

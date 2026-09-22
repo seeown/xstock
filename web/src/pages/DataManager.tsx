@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, type Candle, type StockSummary } from '../api'
+import { api, type Candle, type StockSummary, type SyncState } from '../api'
 import { Banner, Card, CardHead, Empty, Spinner } from '../components/ui'
 
 export default function DataManager() {
   const [stocks, setStocks] = useState<StockSummary[] | null>(null)
+  const [syncState, setSyncState] = useState<SyncState | null>(null)
   const [syncSymbol, setSyncSymbol] = useState('')
   const [importSymbol, setImportSymbol] = useState('')
   const [importJson, setImportJson] = useState('')
@@ -17,6 +18,7 @@ export default function DataManager() {
     } catch (e) {
       setFeedback({ text: e instanceof Error ? e.message : '加载股票列表失败', kind: 'error' })
     }
+    api.syncState().then(setSyncState).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -77,6 +79,12 @@ export default function DataManager() {
         <div>
           <h1>数据管理</h1>
           <p>同步通达信前复权日线，或导入自定义行情数据</p>
+          {syncState && syncState.lastTradingDay && (
+            <p className="sync-state-line">
+              每日增量更新至 <b>{syncState.lastTradingDay}</b>
+              <span>（{syncState.lastRun} · 追加 {syncState.barsAppended} 根 · 除权重拉 {syncState.fullRefetch} 只）</span>
+            </p>
+          )}
         </div>
         <button className="btn ghost" onClick={() => void refresh()}>刷新列表</button>
       </header>

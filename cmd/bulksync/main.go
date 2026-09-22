@@ -294,7 +294,8 @@ func runBarsPhase(ctx context.Context, st *store.Store, clients []*tdx.Client, l
 			for sym := range jobs {
 				candles, err := fetchGuard(&c, sym)
 				if err != nil {
-					if strings.Contains(err.Error(), "超时") {						consecutiveTimeouts++
+					if strings.Contains(err.Error(), "超时") {
+						consecutiveTimeouts++
 						if consecutiveTimeouts >= 15 {
 							log.Printf("worker %d 连续 15 次超时，停止本轮（重跑 --bars 可续）", seed)
 							return
