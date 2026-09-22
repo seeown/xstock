@@ -36,8 +36,8 @@ const icons = {
 }
 
 const navItems = [
-  { to: '/', label: '仪表盘', icon: icons.dashboard, end: true },
-  { to: '/stocks', label: '个股', icon: icons.stocks },
+  { to: '/', label: '回测分析', icon: icons.dashboard, end: true },
+  { to: '/stocks', label: '个股行情', icon: icons.stocks },
   { to: '/market', label: '大盘行情', icon: icons.market },
   { to: '/data', label: '数据管理', icon: icons.data },
   { to: '/strategy', label: '策略说明', icon: icons.strategy },
@@ -48,7 +48,7 @@ export default function Layout({ children }: { children: ReactNode }) {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">N</div>
+          <img src="/logo.png" alt="NStock" className="brand-logo" />
           <div>
             <div className="brand-name">NStock</div>
             <div className="brand-sub">N字战法研究终端</div>

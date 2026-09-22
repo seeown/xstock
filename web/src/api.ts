@@ -30,6 +30,7 @@ export interface Signal {
   risePct: number
   pullbackPct: number
   volumeRatio: number
+  dayChangePct: number
 }
 
 export interface Trade {

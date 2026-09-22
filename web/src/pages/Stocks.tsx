@@ -161,7 +161,7 @@ export default function Stocks() {
     <div className="page">
       <header className="page-head">
         <div>
-          <h1>个股</h1>
+          <h1>个股行情</h1>
           <p>A股全市场浏览 · 共 {result.total} 只符合条件 · 点击列头排序</p>
         </div>
       </header>

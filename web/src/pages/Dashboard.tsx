@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { api, type BacktestResult, type Candle, type NParams } from '../api'
+import { api, type BacktestResult, type Candle, type NParams, type Signal, type Trade } from '../api'
 import KlineChart from '../components/KlineChart'
 import PriceChart from '../components/PriceChart'
 import StockProfileCard from '../components/StockProfileCard'
@@ -37,10 +37,32 @@ export default function Dashboard() {
   const [params, setParams] = useState<NParams | null>(null)
   const [windowDays, setWindowDays] = useState(10)
   const [allHistory, setAllHistory] = useState(false)
+  const [focus, setFocus] = useState<{ from: string; to: string; label: string } | null>(null)
+  // 最新K线序列的引用，供点击回调读取而不闭包旧值。
+  const barsRef = useRef<Candle[]>([])
+
+  // 聚焦某笔交易/信号：K线图缩放到其邻域（前 45 根覆盖上涨与回调，后 15 根看离场）。
+  const focusAt = useCallback((anchor: string, tail: string | undefined, label: string) => {
+    setFocus(prev => {
+      const list = barsRef.current
+      if (!list.length) return prev
+      const idx = list.findIndex(b => b.date === anchor)
+      if (idx < 0) return prev
+      const endIdx = tail ? Math.max(idx, list.findIndex(b => b.date === tail)) : idx
+      const from = list[Math.max(0, idx - 45)].date
+      const to = list[Math.min(list.length - 1, endIdx + 15)].date
+      return { from, to, label }
+    })
+    document.querySelector('.kline-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [])
+
+  const handleMarkClick = useCallback((m: { kind: 'signal' | 'trade'; signal?: Signal; trade?: Trade }) => {
+    if (m.trade) focusAt(m.trade.buyDate, m.trade.sellDate, `${m.trade.buyDate} 买入`)
+    else if (m.signal) focusAt(m.signal.date, undefined, `${m.signal.date} 信号`)
+  }, [focusAt])
   const [bars, setBars] = useState<Candle[]>([])
   const [result, setResult] = useState<BacktestResult | null>(null)
   const [running, setRunning] = useState(false)
-  const [syncing, setSyncing] = useState(false)
   const [feedback, setFeedback] = useState<Feedback>({ text: '', kind: 'info' })
 
   const run = useCallback(async (sym: string, p: NParams) => {
@@ -57,6 +79,8 @@ export default function Dashboard() {
       const [bt, barData] = await Promise.all([api.backtest(symbol, p, days), api.bars(symbol)])
       setResult(bt)
       setBars(barData)
+      barsRef.current = barData
+      setFocus(null)
       setActiveSymbol(symbol)
       const windowNote = bt.windowStart ? `，区间 ${bt.windowStart} ~ ${barData[barData.length - 1]?.date ?? ''}` : ''
       setFeedback({ text: `回测完成（${scope}${windowNote}）：${symbol} 发现 ${(bt.signals ?? []).length} 个 N 字信号。`, kind: 'success' })
@@ -85,31 +109,6 @@ export default function Dashboard() {
     })()
   }, [initialSymbol, run])
 
-  const handleSync = async () => {
-    const symbol = symbolInput.trim().toUpperCase()
-    if (!symbol) {
-      setFeedback({ text: '请输入股票代码。', kind: 'error' })
-      return
-    }
-    if (symbol === 'DEMO') {
-      setFeedback({ text: 'DEMO 是内置演示数据；请输入真实代码，例如 600519.SH。', kind: 'error' })
-      return
-    }
-    setSyncing(true)
-    setFeedback({ text: `正在从通达信拉取 ${symbol} 前复权日线…`, kind: 'info' })
-    try {
-      const r = await api.sync(symbol)
-      setFeedback({
-        text: `同步完成：${symbol} 共 ${r.count} 根日线（${r.firstDate} ~ ${r.lastDate}），正在回测…`,
-        kind: 'success',
-      })
-      if (params) await run(symbol, params)
-    } catch (e) {
-      setFeedback({ text: e instanceof Error ? e.message : '同步失败', kind: 'error' })
-    } finally {
-      setSyncing(false)
-    }
-  }
 
   if (!params) {
     return (
@@ -120,13 +119,13 @@ export default function Dashboard() {
   }
 
   const m = result?.metrics
-  const disabled = running || syncing
+  const disabled = running
 
   return (
     <div className="page">
       <header className="page-head">
         <div>
-          <h1>仪表盘</h1>
+          <h1>回测分析</h1>
           <p>N 字战法筛选、回测与信号可视化</p>
         </div>
         <div className="symbol-bar">
@@ -137,9 +136,6 @@ export default function Dashboard() {
             placeholder="000021.SZ"
             spellCheck={false}
           />
-          <button className="btn ghost" onClick={handleSync} disabled={disabled}>
-            {syncing ? '同步中…' : '同步真实数据'}
-          </button>
           <button className="btn primary" onClick={() => run(symbolInput, params)} disabled={disabled}>
             {running ? '回测中…' : '运行回测'}
           </button>
@@ -162,10 +158,17 @@ export default function Dashboard() {
           {bars.length > 0 && (
             <Card>
               <CardHead
-                title={`${activeSymbol} 日K`}
-                sub="MA5/10/20/30/60/年线(250) + 成交量，支持滚轮缩放与拖动"
+                title={`${activeSymbol} 日K · 买卖点`}
+                sub="点击图上标注或下方表格行聚焦该笔交易；滚轮缩放，拖动平移"
+                right={focus ? (
+                  <span className="focus-chip">
+                    <em>{focus.label}</em>
+                    <button className="btn ghost small" onClick={() => setFocus(null)}>返回全景</button>
+                  </span>
+                ) : undefined}
               />
-              <KlineChart bars={bars} signals={result?.signals ?? []} trades={result?.trades ?? []} />
+              <KlineChart bars={bars} signals={result?.signals ?? []} trades={result?.trades ?? []}
+                focus={focus ? { from: focus.from, to: focus.to } : null} onMarkClick={handleMarkClick} />
             </Card>
           )}
 
@@ -185,16 +188,18 @@ export default function Dashboard() {
                 <table>
                   <thead>
                     <tr>
-                      <th>信号日期</th><th className="num">突破价</th><th className="num">涨幅</th>
+                      <th>信号日期</th><th className="num">突破价</th><th className="num">涨幅</th><th className="num">当日涨跌</th>
                       <th className="num">回撤</th><th className="num">量比</th><th>说明</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(result.signals ?? []).map(s => (
-                      <tr key={s.date}>
+                    {(result?.signals ?? []).map(s => (
+                      <tr key={s.date} className="row-clickable" title="点击在K线图中聚焦这个信号"
+                          onClick={() => focusAt(s.date, undefined, `${s.date} 信号`)}>
                         <td>{s.date}</td>
                         <td className="num">{fmt(s.breakoutPrice)}</td>
                         <td className="num pos">{pct(s.risePct)}</td>
+                        <td className={`num ${s.dayChangePct >= 0 ? 'pos' : 'neg'}`}>{s.dayChangePct >= 0 ? '+' : ''}{pct(s.dayChangePct)}</td>
                         <td className="num">{pct(s.pullbackPct)}</td>
                         <td className="num">{fmt(s.volumeRatio)}×</td>
                         <td>{s.reason}</td>
@@ -229,8 +234,9 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(result.trades ?? []).map(t => (
-                      <tr key={t.buyDate}>
+                    {(result?.trades ?? []).map(t => (
+                      <tr key={t.buyDate} className="row-clickable" title="点击在K线图中聚焦这笔交易"
+                          onClick={() => focusAt(t.buyDate, t.sellDate, `${t.buyDate} 买入`)}>
                         <td>{t.buyDate}</td>
                         <td>{t.sellDate}</td>
                         <td className="num">{fmt(t.buyPrice)}</td>

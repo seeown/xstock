@@ -49,6 +49,8 @@ type Signal struct {
 	RisePct       float64 `json:"risePct"`
 	PullbackPct   float64 `json:"pullbackPct"`
 	VolumeRatio   float64 `json:"volumeRatio"`
+	// DayChangePct is the signal day's own change vs the previous close.
+	DayChangePct float64 `json:"dayChangePct"`
 }
 
 type Trade struct {
@@ -132,9 +134,13 @@ func FindNSignals(symbol string, bars []Candle, p NParams) []Signal {
 			if bars[breakout].Close < requiredBreakout || volumeRatio < p.VolumeRatioMin {
 				continue
 			}
+			dayChange := 0.0
+			if prev := bars[breakout-1].Close; prev > 0 {
+				dayChange = (bars[breakout].Close/prev - 1) * 100
+			}
 			out = append(out, Signal{Symbol: symbol, Date: bars[breakout].Date, BreakoutPrice: bars[breakout].Close,
 				PriorHigh: priorHigh, PullbackLow: pullLow, RisePct: risePct, PullbackPct: pullPct,
-				VolumeRatio: volumeRatio, Reason: "上涨-缩量回调-放量突破"})
+				VolumeRatio: volumeRatio, DayChangePct: dayChange, Reason: "上涨-缩量回调-放量突破"})
 			break
 		}
 	}

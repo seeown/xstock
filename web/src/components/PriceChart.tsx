@@ -51,7 +51,7 @@ export default function PriceChart({ bars, signals, trades }: Props) {
     base: [] as number[], min: 0, max: 0, x: () => 0, y: () => 0,
     line: '', area: '', gridYs: [] as number[], tickIdx: [] as number[], indexForDate: () => -1,
   }
-  const { base, min, max, x, y, line, area, gridYs, tickIdx, indexForDate } = g
+  const { base, x, y, line, area, gridYs, tickIdx, indexForDate } = g
 
   return (
     <div className="chart-host" ref={hostRef}>
