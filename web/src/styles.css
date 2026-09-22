@@ -617,3 +617,7 @@ th.sorted { color: var(--blue); }
 .sync-state-line span { font-size: 12px; }
 
 .param-check { width: auto; accent-color: var(--blue); }
+
+.empty-action { display: flex; justify-content: center; padding: 4px 0 16px; }
+
+.empty-action { display: flex; justify-content: center; padding: 10px 0 18px; }

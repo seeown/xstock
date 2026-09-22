@@ -165,7 +165,7 @@ export default function Dashboard() {
                 title={`${activeSymbol} 日K`}
                 sub="MA5/10/20/30/60/年线(250) + 成交量，支持滚轮缩放与拖动"
               />
-              <KlineChart bars={bars} />
+              <KlineChart bars={bars} signals={result?.signals ?? []} trades={result?.trades ?? []} />
             </Card>
           )}
 
@@ -204,7 +204,16 @@ export default function Dashboard() {
                 </table>
               </div>
             ) : (
-              <Empty text="当前参数下未发现 N 字信号" />
+              <>
+                <Empty text="当前时间范围内未发现 N 字信号" />
+                {!allHistory && (
+                  <div className="empty-action">
+                    <button className="btn ghost small" onClick={() => setAllHistory(true)}>
+                      切到全部历史查看
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </Card>
 
@@ -234,7 +243,16 @@ export default function Dashboard() {
                 </table>
               </div>
             ) : (
-              <Empty text="尚未产生模拟交易" />
+              <>
+                <Empty text="尚未产生模拟交易" />
+                {!allHistory && (
+                  <div className="empty-action">
+                    <button className="btn ghost small" onClick={() => setAllHistory(true)}>
+                      切到全部历史查看
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </Card>
         </div>
@@ -251,7 +269,7 @@ export default function Dashboard() {
                     type="number"
                     min={f.min}
                     step={f.step ?? 1}
-                    value={params[f.key]}
+                    value={params[f.key] > 0 ? params[f.key] : ''}
                     onChange={e => setParams({ ...params, [f.key]: Number(e.target.value) })}
                   />
                   <em>{f.unit}</em>
@@ -267,7 +285,7 @@ export default function Dashboard() {
                     type="number"
                     min={f.min}
                     step={f.step ?? 1}
-                    value={params[f.key]}
+                    value={params[f.key] > 0 ? params[f.key] : ''}
                     onChange={e => setParams({ ...params, [f.key]: Number(e.target.value) })}
                   />
                   <em>{f.unit}</em>
@@ -282,7 +300,7 @@ export default function Dashboard() {
                   type="number"
                   min={1}
                   step={1}
-                  value={allHistory ? '' : windowDays}
+                  value={allHistory || !windowDays ? '' : windowDays}
                   disabled={allHistory}
                   placeholder="10"
                   onChange={e => setWindowDays(Number(e.target.value))}

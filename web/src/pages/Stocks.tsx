@@ -255,9 +255,9 @@ export default function Stocks() {
                       </td>
                       <td>{item.board && <span className="concept-chip board-chip">{item.board}</span>}</td>
                       <td className="muted">{item.industry || '—'}</td>
-                      <td className="num">{q ? fmt(q.price) : '—'}</td>
-                      <td className={`num ${q ? (q.changePct >= 0 ? 'pos' : 'neg') : ''}`}>
-                        {q && q.preClose > 0 ? `${q.changePct >= 0 ? '+' : ''}${pct(q.changePct)}` : '—'}
+                      <td className="num">{q && q.price > 0 ? fmt(q.price) : '—'}</td>
+                      <td className={`num ${q && q.price > 0 ? (q.changePct >= 0 ? 'pos' : 'neg') : ''}`}>
+                        {q && q.price > 0 && q.preClose > 0 ? `${q.changePct >= 0 ? '+' : ''}${pct(q.changePct)}` : '—'}
                       </td>
                       <td className="num">{q ? fmtAmount(q.amount) : '—'}</td>
                       <td className="muted">{item.listDate || '—'}</td>

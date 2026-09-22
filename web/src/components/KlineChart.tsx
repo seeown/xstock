@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { init, dispose } from 'klinecharts'
 import type { Chart, KLineData } from 'klinecharts'
-import type { Candle } from '../api'
+import type { Candle, Signal, Trade } from '../api'
 
 export const MA_PERIODS = [5, 10, 20, 30, 60, 250]
 
@@ -28,8 +28,11 @@ export function computeMA(bars: Candle[], period: number): Array<number | null> 
 // Candlestick chart on klinecharts v10: main pane shows MA5/10/20/30/60/年线
 // (250), sub pane shows volume. Zoom/pan/crosshair are built in. v10 loads data
 // through a DataLoader instead of applyNewData; our dataset is fully local, so
-// the loader hands back the whole series on init.
-export default function KlineChart({ bars, height = 420 }: { bars: Candle[]; height?: number }) {
+// the loader hands back the whole series on init. Optional N-pattern signals
+// and simulated trades are drawn as annotations on the candles.
+export default function KlineChart({
+  bars, signals, trades, height = 420,
+}: { bars: Candle[]; signals?: Signal[]; trades?: Trade[]; height?: number }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<Chart | null>(null)
 
@@ -85,11 +88,23 @@ export default function KlineChart({ bars, height = 420 }: { bars: Candle[]; hei
     chart.createIndicator({ name: 'MA', calcParams: MA_PERIODS, paneId: 'candle_pane' }, false)
     chart.createIndicator('VOL')
 
+    // Buy/sell annotations so the entry points are actually readable on a
+    // multi-year chart (the line chart drowns them out).
+    const tsOf = (date: string) => Date.parse(date)
+    for (const s of signals ?? []) {
+      chart.createOverlay({ name: 'simpleAnnotation', points: [{ timestamp: tsOf(s.date) }], extendData: `信 ${s.date.slice(5)}` })
+    }
+    for (const t of trades ?? []) {
+      const ret = t.returnPct >= 0 ? `+${t.returnPct.toFixed(1)}%` : `${t.returnPct.toFixed(1)}%`
+      chart.createOverlay({ name: 'simpleAnnotation', points: [{ timestamp: tsOf(t.buyDate) }], extendData: `买 ${t.buyDate.slice(5)}` })
+      chart.createOverlay({ name: 'simpleAnnotation', points: [{ timestamp: tsOf(t.sellDate) }], extendData: `卖${ret}` })
+    }
+
     return () => {
       chartRef.current = null
       dispose(el)
     }
-  }, [bars])
+  }, [bars, signals, trades])
 
   if (!bars.length) {
     return (

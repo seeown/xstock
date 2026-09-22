@@ -66,8 +66,12 @@ func (c *Client) FetchQuotes(symbols []string) ([]Quote, error) {
 			continue
 		}
 		q := Quote{Symbol: sym, Price: item.Close, PreClose: item.PreClose, Amount: item.Amount}
-		if q.PreClose > 0 {
+		// A zero close means no trade today (suspension); computing a change
+		// against the previous close would show a bogus -100%.
+		if q.Price > 0 && q.PreClose > 0 {
 			q.ChangePct = (q.Price - q.PreClose) / q.PreClose * 100
+		} else {
+			q.Price, q.PreClose = 0, 0
 		}
 		out = append(out, q)
 	}
