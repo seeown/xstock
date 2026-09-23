@@ -10,9 +10,9 @@ const UP_COLOR = '#f4577a'
 const DOWN_COLOR = '#22c58b'
 const GOLD = '#f5b544'
 const ORANGE = '#ff9600'
-const BLUE = '#4f8cff'
 
-// ztline 价位线：两个同价位锚点横跨窗口首尾，右端带文字标签。
+// ztline 价位线：两个同价位锚点横跨窗口首尾，右端带文字标签；
+// textOnly 模式只画文字不画线（前高线横穿全图压在蜡烛上不可读，只留文字）。
 let ztlineRegistered = false
 function ensureZtLine() {
   if (ztlineRegistered) return
@@ -21,22 +21,24 @@ function ensureZtLine() {
     name: 'ztline',
     totalStep: 2,
     createPointFigures: ({ overlay, coordinates }) => {
-      const d = overlay.extendData as { color: string; label: string; below?: boolean } | undefined
+      const d = overlay.extendData as { color: string; label: string; below?: boolean; textOnly?: boolean } | undefined
       const c0 = coordinates[0]
       const c1 = coordinates[1]
       if (!c0 || !c1 || !d) return []
-      return [
-        { type: 'line', attrs: { coordinates: [c0, c1] }, styles: { color: d.color, style: 'dashed', size: 1, dashedValue: [4, 3] } },
-        {
-          type: 'text',
-          attrs: {
-            x: c1.x, y: d.below ? c1.y + 11 : c1.y - 4,
-            text: d.label, align: 'right', baseline: d.below ? 'top' : 'bottom',
-          },
-          styles: { color: d.color, size: 10 },
-          ignoreEvent: true,
+      const figures: Array<{ type: string; attrs: unknown; styles?: unknown; ignoreEvent?: boolean }> = []
+      if (!d.textOnly) {
+        figures.push({ type: 'line', attrs: { coordinates: [c0, c1] }, styles: { color: d.color, style: 'dashed', size: 1, dashedValue: [4, 3] } })
+      }
+      figures.push({
+        type: 'text',
+        attrs: {
+          x: c1.x, y: d.below ? c1.y + 11 : c1.y - 4,
+          text: d.label, align: 'right', baseline: d.below ? 'top' : 'bottom',
         },
-      ]
+        styles: { color: d.color, size: 10 },
+        ignoreEvent: true,
+      })
+      return figures
     },
   })
 }
@@ -156,7 +158,8 @@ export default function MiniKline({
       indicator: {
         tooltip: { showRule: 'follow_cross' },
         bars: [{ style: 'fill', upColor: UP_COLOR, downColor: DOWN_COLOR }],
-        lines: [{ style: 'solid', smooth: false, size: 1, color: '#935EBD' }],
+        // 指标线全量配色：默认主题只带 5 色，VOL 均量线会轮到刺眼的蓝色。
+        lines: ['#935EBD', '#f5b544', '#22c58b', '#e8eef9', '#f4577a'].map(color => ({ style: 'solid', smooth: false, size: 1, color })),
       },
     })
     chart.setDataLoader({ getBars: ({ callback }) => callback(data, false) })
@@ -173,12 +176,12 @@ export default function MiniKline({
     const lastTs = Date.parse(bars[bars.length - 1].date)
     if (setup) {
       const firstTs = Date.parse(bars[0].date)
-      const priceLine = (price: number, color: string, label: string, below = false) => {
+      const priceLine = (price: number, color: string, label: string, below = false, textOnly = false) => {
         if (!(price > 0)) return
         chart.createOverlay({
           name: 'ztline',
           points: [{ timestamp: firstTs, value: price }, { timestamp: lastTs, value: price }],
-          extendData: { color, label, below },
+          extendData: { color, label, below, textOnly },
         })
       }
       // 低吸区色带（沿窗口首尾）
@@ -192,7 +195,8 @@ export default function MiniKline({
         })
       }
       priceLine(setup.boardClose, GOLD, `涨停价 ${setup.boardClose.toFixed(2)}`)
-      priceLine(setup.swingHigh, BLUE, `前高 ${setup.swingHigh.toFixed(2)}`)
+      // 前高只留文字不画线：横穿全图的蓝色虚线压在蜡烛上不可读。
+      priceLine(setup.swingHigh, '#cdd9ec', `前高 ${setup.swingHigh.toFixed(2)}`, false, true)
       const stop = setup.stage === 'b1' ? setup.stopLossB1 : setup.stage === 'b2' ? setup.stopLossB2 : setup.stopLossB3
       priceLine(stop, '#aab6cc', `止损 ${stop.toFixed(2)}`, true)
 
