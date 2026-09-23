@@ -34,7 +34,7 @@ function ensureZtLine() {
   })
 }
 
-// ztlegend 右上角价位图例：深色底竖排，按价位从高到低，永不压叠。
+// ztlegend 右上角价位图例：竖排纯文字（无底色块），按价位从高到低。
 let ztlegendRegistered = false
 function ensureZtLegend() {
   if (ztlegendRegistered) return
@@ -46,23 +46,12 @@ function ensureZtLegend() {
       const d = overlay.extendData as { rows: Array<{ text: string; color: string }> } | undefined
       const c1 = coordinates[1]
       if (!c1 || !d || !d.rows.length) return []
-      const figures: Array<{ type: string; attrs: unknown; styles?: unknown; ignoreEvent?: boolean }> = []
-      d.rows.forEach((row, i) => {
-        const y = c1.y + 8 + i * 16
-        figures.push({
-          type: 'rect',
-          attrs: { x: c1.x - 98, y: y - 2, width: 96, height: 15 },
-          styles: { style: 'fill', color: 'rgba(7,13,24,0.78)' },
-          ignoreEvent: true,
-        })
-        figures.push({
-          type: 'text',
-          attrs: { x: c1.x - 6, y, text: row.text, align: 'right', baseline: 'top' },
-          styles: { color: row.color, size: 10 },
-          ignoreEvent: true,
-        })
-      })
-      return figures
+      return d.rows.map((row, i) => ({
+        type: 'text',
+        attrs: { x: c1.x - 6, y: c1.y + 8 + i * 16, text: row.text, align: 'right', baseline: 'top' },
+        styles: { color: row.color, size: 10 },
+        ignoreEvent: true,
+      }))
     },
   })
 }
