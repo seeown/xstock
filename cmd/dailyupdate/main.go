@@ -1,7 +1,8 @@
 // Command dailyupdate runs the nightly incremental sync: probe every stock's
 // newest page once, append new trading days, fully re-fetch stocks whose QFQ
-// series was rebased by a dividend, then refresh names / new listings /
-// concepts. Designed to be scheduled (launchd) at 17:00 on trading days.
+// series was rebased by a dividend, sync the four market-page indices, then
+// refresh names / new listings / concepts. Designed to be scheduled (launchd)
+// at 17:00 on trading days.
 //
 // Anti-ban pacing: a single probe request per stock, 2 workers with a short
 // sleep between stocks, an early trading-day check that exits on holidays,
@@ -107,6 +108,9 @@ func main() {
 	// records whether this job actually completed for the trading day.
 	if !*force {
 		if state, err := st.GetSyncState(ctx); err == nil && state.LastTradingDay >= tradingDay {
+			// 个股已同步过；指数可能在上次运行时拉取失败，补齐后再退出
+			// （已最新的指数会被跳过，通常零请求）。
+			updateIndices(ctx, st, clients[0], lastBars, tradingDay, tomorrow)
 			log.Printf("%s 的增量更新已完成过（sync_state），本次结束", tradingDay)
 			return
 		}
@@ -114,8 +118,10 @@ func main() {
 	log.Printf("交易日 %s（由 %s 探测）：开始增量同步", tradingDay, gateSymbol)
 
 	// ---- Bars: probe each stock once, append new days, re-fetch rebases.
-	// Indices are deliberately excluded — TDX's index kline endpoint is
-	// unreliable; the market page restores them on demand via /api/sync. ----
+	// The market-page indices are synced right after (updateIndices): TDX's
+	// index kline endpoint has served misaligned garbage on some hosts, so
+	// each index fetch is validated before writing and never blocks stocks.
+	// ----
 	symbols := make([]string, 0, len(st.AllProfiles()))
 	for _, p := range st.AllProfiles() {
 		symbols = append(symbols, p.Symbol)
@@ -180,6 +186,9 @@ func main() {
 	}
 	log.Printf("K线增量完成：探测 %d 只，追加 %d 根，全量重建 %d 只，用时 %s",
 		state.StocksProbed, state.BarsAppended, state.FullRefetch, time.Since(start).Round(time.Second))
+
+	// ---- Indices: bring the market-page watchlist to the trading day. ----
+	updateIndices(ctx, st, clients[0], lastBars, tradingDay, tomorrow)
 
 	// ---- Stock info: names / boards diff, new listings, concepts. ----
 	refreshListings(ctx, st, clients[0], &state)
@@ -250,6 +259,80 @@ func updateOne(ctx context.Context, st *store.Store, c *tdx.Client, sym, lastDat
 	}
 	n, err := st.AppendBars(ctx, sym, fresh)
 	return n, false, err
+}
+
+// updateIndices syncs the market-page index watchlist to the trading day.
+// TDX's index kline endpoint intermittently returns byte-misaligned data, so
+// every fetch is validated before writing: dates must fall in 1991~tomorrow
+// and be strictly increasing, prices positive, and the stored last day must
+// reappear with a matching close (indices carry no adjustment factors). A
+// rejected or failed index is skipped with a log line — it never blocks the
+// stock sync and the market page can still restore it via /api/sync.
+func updateIndices(ctx context.Context, st *store.Store, c *tdx.Client, lastBars map[string]struct {
+	Date  string
+	Close float64
+}, tradingDay, tomorrow string) {
+	for _, def := range tdx.IndexDefs {
+		last := lastBars[def.Symbol]
+		if last.Date >= tradingDay {
+			continue // 已最新（上次运行补齐过）
+		}
+		bars, err := c.FetchDailyIndex(def)
+		if err != nil {
+			log.Printf("指数 %s 拉取失败（跳过，可在大盘页手动同步）: %v", def.Name, err)
+			continue
+		}
+		if !saneIndexBars(bars, tomorrow) {
+			log.Printf("指数 %s 数据异常（日期/价格越界或乱序），拒绝写入", def.Name)
+			continue
+		}
+		if last.Date == "" {
+			if err := st.Replace(ctx, def.Symbol, bars); err != nil {
+				log.Printf("指数 %s 全量写入失败: %v", def.Name, err)
+				continue
+			}
+			log.Printf("指数 %s 全量写入 %d 根（至 %s）", def.Name, len(bars), bars[len(bars)-1].Date)
+			continue
+		}
+		overlapOK := false
+		for _, b := range bars {
+			if b.Date == last.Date {
+				overlapOK = abs(b.Close-last.Close) <= last.Close*0.005
+				break
+			}
+		}
+		if !overlapOK {
+			log.Printf("指数 %s 重叠日 %s 收盘与本地不一致，拒绝写入（疑似错位）", def.Name, last.Date)
+			continue
+		}
+		var fresh []market.Candle
+		for _, b := range bars {
+			if b.Date > last.Date {
+				fresh = append(fresh, b)
+			}
+		}
+		n, err := st.AppendBars(ctx, def.Symbol, fresh)
+		if err != nil {
+			log.Printf("指数 %s 追加失败: %v", def.Name, err)
+			continue
+		}
+		log.Printf("指数 %s 追加 %d 根（至 %s）", def.Name, n, bars[len(bars)-1].Date)
+	}
+}
+
+// saneIndexBars 防御 TDX 指数接口的字节错位垃圾数据。
+func saneIndexBars(bars []market.Candle, tomorrow string) bool {
+	prev := ""
+	for _, b := range bars {
+		if b.Date < "1991-01-01" || b.Date > tomorrow || b.Date <= prev {
+			return false
+		}
+		if b.Open <= 0 || b.High <= 0 || b.Low <= 0 || b.Close <= 0 {
+			return false
+		}
+		prev = b.Date
+	}
+	return true
 }
 
 // refreshListings diffs the exchange security lists against stored profiles:
