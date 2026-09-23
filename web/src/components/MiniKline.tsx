@@ -21,22 +21,46 @@ function ensureZtLine() {
     name: 'ztline',
     totalStep: 2,
     createPointFigures: ({ overlay, coordinates }) => {
-      const d = overlay.extendData as { color: string; label: string; below?: boolean; textOnly?: boolean } | undefined
+      const d = overlay.extendData as { color: string } | undefined
       const c0 = coordinates[0]
       const c1 = coordinates[1]
       if (!c0 || !c1 || !d) return []
+      // 只画线，文字统一进右上角图例（ztlegend）：价位接近的标签挂在
+      // 各自价位右端会互相压叠（如 swing 高点与首板收盘价差几个点）。
+      return [
+        { type: 'line', attrs: { coordinates: [c0, c1] }, styles: { color: d.color, style: 'dashed', size: 1, dashedValue: [4, 3] } },
+      ]
+    },
+  })
+}
+
+// ztlegend 右上角价位图例：深色底竖排，按价位从高到低，永不压叠。
+let ztlegendRegistered = false
+function ensureZtLegend() {
+  if (ztlegendRegistered) return
+  ztlegendRegistered = true
+  registerOverlay({
+    name: 'ztlegend',
+    totalStep: 2,
+    createPointFigures: ({ overlay, coordinates }) => {
+      const d = overlay.extendData as { rows: Array<{ text: string; color: string }> } | undefined
+      const c1 = coordinates[1]
+      if (!c1 || !d || !d.rows.length) return []
       const figures: Array<{ type: string; attrs: unknown; styles?: unknown; ignoreEvent?: boolean }> = []
-      if (!d.textOnly) {
-        figures.push({ type: 'line', attrs: { coordinates: [c0, c1] }, styles: { color: d.color, style: 'dashed', size: 1, dashedValue: [4, 3] } })
-      }
-      figures.push({
-        type: 'text',
-        attrs: {
-          x: c1.x, y: d.below ? c1.y + 11 : c1.y - 4,
-          text: d.label, align: 'right', baseline: d.below ? 'top' : 'bottom',
-        },
-        styles: { color: d.color, size: 10 },
-        ignoreEvent: true,
+      d.rows.forEach((row, i) => {
+        const y = c1.y + 8 + i * 16
+        figures.push({
+          type: 'rect',
+          attrs: { x: c1.x - 98, y: y - 2, width: 96, height: 15 },
+          styles: { style: 'fill', color: 'rgba(7,13,24,0.78)' },
+          ignoreEvent: true,
+        })
+        figures.push({
+          type: 'text',
+          attrs: { x: c1.x - 6, y, text: row.text, align: 'right', baseline: 'top' },
+          styles: { color: row.color, size: 10 },
+          ignoreEvent: true,
+        })
       })
       return figures
     },
@@ -169,6 +193,7 @@ export default function MiniKline({
     chart.createIndicator('VOL')
 
     ensureZtLine()
+    ensureZtLegend()
     ensureZtBand()
     ensureZtMark()
 
@@ -176,12 +201,12 @@ export default function MiniKline({
     const lastTs = Date.parse(bars[bars.length - 1].date)
     if (setup) {
       const firstTs = Date.parse(bars[0].date)
-      const priceLine = (price: number, color: string, label: string, below = false, textOnly = false) => {
+      const priceLine = (price: number, color: string) => {
         if (!(price > 0)) return
         chart.createOverlay({
           name: 'ztline',
           points: [{ timestamp: firstTs, value: price }, { timestamp: lastTs, value: price }],
-          extendData: { color, label, below, textOnly },
+          extendData: { color },
         })
       }
       // 低吸区色带（沿窗口首尾）
@@ -194,11 +219,26 @@ export default function MiniKline({
           ],
         })
       }
-      priceLine(setup.boardClose, GOLD, `涨停价 ${setup.boardClose.toFixed(2)}`)
-      // 前高只留文字不画线：横穿全图的蓝色虚线压在蜡烛上不可读。
-      priceLine(setup.swingHigh, '#cdd9ec', `前高 ${setup.swingHigh.toFixed(2)}`, false, true)
       const stop = setup.stage === 'b1' ? setup.stopLossB1 : setup.stage === 'b2' ? setup.stopLossB2 : setup.stopLossB3
-      priceLine(stop, '#aab6cc', `止损 ${stop.toFixed(2)}`, true)
+      priceLine(setup.boardClose, GOLD)
+      priceLine(stop, '#aab6cc')
+      // 价位图例：右上角竖排（前高只留文字不画线，遵循只留文字的要求）。
+      const legend = [
+        { price: setup.swingHigh, text: `前高 ${setup.swingHigh.toFixed(2)}`, color: '#cdd9ec' },
+        { price: setup.boardClose, text: `涨停价 ${setup.boardClose.toFixed(2)}`, color: GOLD },
+        { price: stop, text: `止损 ${stop.toFixed(2)}`, color: '#aab6cc' },
+      ].filter(e => e.price > 0).sort((a, b) => b.price - a.price)
+      ensureZtLegend()
+      chart.createOverlay({
+        name: 'ztlegend',
+        // 锚在最高档价位（窗口最高点）右端，行块从锚点向下排，与K线上
+        // 方的「板」徽章天然错开。
+        points: [
+          { timestamp: firstTs, value: legend[0].price },
+          { timestamp: lastTs, value: legend[0].price },
+        ],
+        extendData: { rows: legend.map(e => ({ text: e.text, color: e.color })) },
+      })
 
       const mark = (date: string, kind: 'board' | 'breakout' | 'star', color: string, label = '') => {
         const bar = byDate.get(date)
