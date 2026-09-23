@@ -27,6 +27,11 @@ const icons = {
       <path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" />
     </svg>
   ),
+  screen: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 5h18l-7 8v5.5L10 21v-8L3 5z" />
+    </svg>
+  ),
   strategy: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
@@ -37,6 +42,7 @@ const icons = {
 
 const navItems = [
   { to: '/', label: '回测分析', icon: icons.dashboard, end: true },
+  { to: '/screen', label: '股票筛查', icon: icons.screen },
   { to: '/stocks', label: '个股行情', icon: icons.stocks },
   { to: '/market', label: '大盘行情', icon: icons.market },
   { to: '/data', label: '数据管理', icon: icons.data },

@@ -21,6 +21,27 @@ export interface NParams {
   maxHoldDays: number
 }
 
+// 首板回调（N 字涨停）策略参数：首板涨停 → 缩量回调 → 放量突破。
+export interface FirstBoardParams {
+  boardLookbackDays: number
+  boardVolRatioMin: number
+  boardVolRatioMax: number
+  excludeOneWordBoard: boolean
+  pullbackMinDays: number
+  pullbackMaxDays: number
+  pullbackMaxPct: number
+  pullbackVolRatioMax: number
+  breakoutBufferPct: number
+  breakoutVolRatioMin: number
+  breakoutVolRatioMax: number
+  stopLossPct: number
+  takeProfitPct: number
+  maxHoldDays: number
+}
+
+export type StrategyKind = 'n' | 'zt'
+export type StrategyParams = NParams | FirstBoardParams
+
 export interface Signal {
   symbol: string
   date: string
@@ -32,6 +53,13 @@ export interface Signal {
   pullbackPct: number
   volumeRatio: number
   dayChangePct: number
+  // 首板回调策略的扩展字段
+  boardDate?: string
+  boardVolRatio?: number
+  pullbackDays?: number
+  pullbackVolRatio?: number
+  limitPct?: number
+  strongWash?: boolean
 }
 
 export interface Trade {
@@ -126,6 +154,53 @@ export interface Quote {
   amount: number
 }
 
+// 全市场 N 字筛查：一个存活 setup 的当前快照（阶段 b1/b2/b3）。
+export interface ScreenSetup {
+  symbol: string
+  stage: 'b1' | 'b2' | 'b3'
+  keyDate: string
+  asOf: string
+  limitPct: number
+  boardDate: string
+  boardClose: number
+  boardHigh: number
+  swingHigh: number
+  riseStart: number
+  boardVolRatio: number
+  boardVolume: number
+  ma20: number
+  currentMa20: number
+  currentClose: number
+  pullbackDays: number
+  pullbackLow: number
+  pullbackDepth: number
+  pullbackVolRatio: number
+  b1ZoneLow: number
+  b1ZoneHigh: number
+  b1Triggered: boolean
+  b1TriggerDate?: string
+  stopLossB1: number
+  breakoutDate?: string
+  breakoutPrice: number
+  breakoutVolRatio: number
+  daysSinceBreakout: number
+  stopLossB2: number
+  retestDays: number
+  retestLow: number
+  retestTriggered: boolean
+  retestTriggerDate?: string
+  stopLossB3: number
+  name?: string
+  industry?: string
+}
+
+export interface ScreenResult {
+  asOf: string
+  windowDays: number
+  counts: { b1: number; b2: number; b3: number }
+  items: ScreenSetup[]
+}
+
 export interface SyncState {
   lastRun: string
   lastTradingDay: string
@@ -158,14 +233,16 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  defaultParams: () => request<NParams>('/api/params/default'),
+  defaultParams: (strategy: StrategyKind = 'n') =>
+    request<StrategyParams>(`/api/params/default?strategy=${strategy}`),
   bars: (symbol: string) => request<Candle[]>(`/api/stocks/${encodeURIComponent(symbol)}/bars`),
-  signals: (symbol: string) => request<Signal[]>(`/api/stocks/${encodeURIComponent(symbol)}/signals`),
-  backtest: (symbol: string, params: NParams, days = 0) =>
+  signals: (symbol: string, strategy: StrategyKind = 'n') =>
+    request<Signal[]>(`/api/stocks/${encodeURIComponent(symbol)}/signals?strategy=${strategy}`),
+  backtest: (symbol: string, params: StrategyParams, days = 0, strategy: StrategyKind = 'n') =>
     request<BacktestResult>(`/api/backtests/${encodeURIComponent(symbol)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ initialCash: 100000, params, days }),
+      body: JSON.stringify({ initialCash: 100000, strategy, params, days }),
     }),
   sync: (symbol: string) =>
     request<SyncResult>(`/api/sync/${encodeURIComponent(symbol)}`, { method: 'POST' }),
@@ -197,6 +274,7 @@ export const api = {
   concepts: () => request<ConceptCount[]>('/api/concepts'),
   industries: () => request<string[]>('/api/industries'),
   syncState: () => request<SyncState>('/api/sync-state'),
+  screen: (days: number) => request<ScreenResult>(`/api/screen?days=${days}`),
   quotes: (symbols: string[]) =>
     request<Quote[]>(`/api/quotes?symbols=${encodeURIComponent(symbols.join(','))}`),
 }

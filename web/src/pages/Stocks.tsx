@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type ConceptCount, type ProfileListItem, type ProfilePageResult, type Quote, type StockProfile } from '../api'
+import { KlineDetailModal, KlinePopover, useKlinePreview } from '../components/klinePreview'
 import { Banner, Card, CardHead, fmt, pct } from '../components/ui'
 
 const BOARDS = ['上证主板', '深证主板', '创业板', '科创板', '北交所']
@@ -56,6 +58,21 @@ export default function Stocks() {
   const [drawerProfile, setDrawerProfile] = useState<StockProfile | null>(null)
   const [feedback, setFeedback] = useState<{ text: string; kind: 'info' | 'error' | 'success' }>({ text: '', kind: 'info' })
   const loadSeq = useRef(0)
+
+  // 行级 K 线预览：悬浮出浮窗，点击「代码」列弹出大图（未同步K线的票不挂）。
+  const kline = useKlinePreview()
+  const klineTarget = (item: ProfileListItem) => ({
+    symbol: item.symbol,
+    name: item.name,
+    sub: [item.board, item.industry].filter(Boolean).join(' · ') || undefined,
+  })
+  const rowHover = (item: ProfileListItem) =>
+    item.barCount > 0
+      ? {
+          onMouseEnter: (e: ReactMouseEvent<HTMLTableRowElement>) => kline.enterRow(klineTarget(item), e.currentTarget),
+          onMouseLeave: kline.leaveRow,
+        }
+      : {}
 
   // debounce the free-text search
   useEffect(() => {
@@ -226,7 +243,7 @@ export default function Stocks() {
         {loading ? (
           <div className="chart-empty">正在加载…</div>
         ) : (
-          <div className="table-wrap">
+          <div className="table-wrap" onScroll={kline.leaveRow}>
             <table>
               <thead>
                 <tr>
@@ -246,8 +263,20 @@ export default function Stocks() {
                 {result.items.map(item => {
                   const q = quotes[item.symbol]
                   return (
-                    <tr key={item.symbol}>
-                      <td className="mono">{item.symbol}</td>
+                    <tr key={item.symbol} {...rowHover(item)}>
+                      <td className="mono">
+                        {item.barCount > 0 ? (
+                          <button
+                            className="link-btn mono"
+                            title="点击查看K线"
+                            onClick={() => kline.openDetail(klineTarget(item))}
+                          >
+                            {item.symbol}
+                          </button>
+                        ) : (
+                          item.symbol
+                        )}
+                      </td>
                       <td>
                         <button className="link-btn" onClick={() => openDrawer(item)}>
                           {item.name || item.symbol}
@@ -332,6 +361,9 @@ export default function Stocks() {
           </aside>
         </>
       )}
+      {/* 悬浮K线预览 + 点击代码的K线详情弹窗（共享组件） */}
+      <KlinePopover state={kline.hover} />
+      <KlineDetailModal state={kline.detail} onClose={kline.closeDetail} onOpenBacktest={symbol => navigate(`/?symbol=${symbol}`)} />
     </div>
   )
 }

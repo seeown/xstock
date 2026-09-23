@@ -45,7 +45,7 @@ function ensureNsEvent() {
       const d = overlay.extendData as { kind: string; color: string; label: string; ring: string } | undefined
       if (!c || !d) return []
       const figures: Array<{ type: string; attrs: unknown; styles?: unknown; ignoreEvent?: boolean }> = []
-      if ((d.kind === 'buy' || d.kind === 'sell') && c1) {
+      if ((d.kind === 'buy' || d.kind === 'sell' || d.kind === 'board') && c1) {
         // 事件日蜡烛描边：竖框覆盖当根K线高低价范围
         const y = Math.min(c.y, c1.y)
         const h = Math.max(2, Math.abs(c.y - c1.y))
@@ -73,8 +73,17 @@ function ensureNsEvent() {
           styles: { color: d.color, size: 13, weight: 'bold' },
           ignoreEvent: true,
         })
+      } else if (d.kind === 'board' && c1) {
+        // 首板日：橙色描边 + K线上方的「板」徽章
+        figures.push({
+          type: 'text',
+          attrs: { x: c.x, y: c1.y - gap, text: '板', align: 'center', baseline: 'bottom' },
+          styles: { color: d.color, size: 11, weight: 'bold' },
+          ignoreEvent: true,
+        })
       } else {
         // 信号日：金色小菱形 + 「信」
+        const size = 5
         const cy = c.y + gap + size
         figures.push({
           type: 'polygon',
@@ -240,6 +249,17 @@ export default function KlineChart({
         if (!bar) continue
         const ts = Date.parse(g.date)
         event([{ timestamp: ts, value: bar.low }], { kind: 'signal', color: '#f5b544', label: '', ring: '#f5b544' }, { kind: 'signal', signal: g })
+        // 首板回调策略：首板日画橙色描边 + 「板」徽章，构成 板▲→回调→突破 的三段标注。
+        if (g.boardDate) {
+          const bBar = barByDate.get(g.boardDate)
+          if (bBar) {
+            event(
+              [{ timestamp: Date.parse(g.boardDate), value: bBar.low }, { timestamp: Date.parse(g.boardDate), value: bBar.high }],
+              { kind: 'board', color: '#ff9600', label: '', ring: '#ff9600' },
+              { kind: 'signal', signal: g },
+            )
+          }
+        }
       }
       for (const t of trades ?? []) {
         const buyBar = barByDate.get(t.buyDate)
@@ -334,9 +354,12 @@ export default function KlineChart({
                   const g = tip.mark.signal
                   return (
                     <>
-                      <b>{g.date} N 字信号</b>
+                      <b>{g.date} {g.boardDate ? '首板回调信号' : 'N 字信号'}</b>
+                      {g.boardDate && (
+                        <span>首板 {g.boardDate} · 板日量比 {g.boardVolRatio?.toFixed(1) ?? '—'}×</span>
+                      )}
                       <span>突破 {g.breakoutPrice.toFixed(2)} · 量比 {g.volumeRatio.toFixed(1)}×</span>
-                      <span>段内涨 {g.risePct.toFixed(1)}% · 回调 {g.pullbackPct.toFixed(1)}%</span>
+                      <span>段内涨 {g.risePct.toFixed(1)}% · 回调 {g.pullbackPct.toFixed(1)}%{g.pullbackDays ? ` / ${g.pullbackDays} 天` : ''}</span>
                       <span className={g.dayChangePct >= 0 ? 'pos' : 'neg'}>
                         当日 {g.dayChangePct >= 0 ? '+' : ''}{g.dayChangePct.toFixed(2)}%
                       </span>

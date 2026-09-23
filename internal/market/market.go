@@ -54,6 +54,19 @@ type Signal struct {
 	VolumeRatio   float64 `json:"volumeRatio"`
 	// DayChangePct is the signal day's own change vs the previous close.
 	DayChangePct float64 `json:"dayChangePct"`
+
+	// 首板回调策略的扩展字段；通用 N 字策略为零值，omitempty 下不出现在 JSON。
+	BoardDate string  `json:"boardDate,omitempty"`
+	// BoardVolRatio 首板日标准量比（当日量 ÷ 前 5 日均量）。
+	BoardVolRatio float64 `json:"boardVolRatio,omitempty"`
+	// PullbackDays 回调段交易日数；PullbackVolRatio 为回调期最大单日量
+	// 相对首板日量的比例（首板回调策略）。
+	PullbackDays     int     `json:"pullbackDays,omitempty"`
+	PullbackVolRatio float64 `json:"pullbackVolRatio,omitempty"`
+	// LimitPct 首板所属板块的涨停幅度（10/20）。
+	LimitPct float64 `json:"limitPct,omitempty"`
+	// StrongWash 洗盘金标准：回调期最小成交量 ≤ 首板日量的 1/3。
+	StrongWash bool `json:"strongWash,omitempty"`
 }
 
 type Trade struct {
@@ -151,11 +164,33 @@ func FindNSignals(symbol string, bars []Candle, p NParams) []Signal {
 	return out
 }
 
+// ExitParams 是各策略共享的交易规则：信号次日开盘入场，止损/止盈按盘中
+// 触及价成交，超过最长持仓按收盘价平仓。
+type ExitParams struct {
+	StopLossPct   float64
+	TakeProfitPct float64
+	MaxHoldDays   int
+}
+
+func (p NParams) exits() ExitParams {
+	return ExitParams{StopLossPct: p.StopLossPct, TakeProfitPct: p.TakeProfitPct, MaxHoldDays: p.MaxHoldDays}
+}
+
 func Backtest(symbol string, bars []Candle, p NParams, initialCash float64) BacktestResult {
+	return BacktestFromSignals(symbol, bars, FindNSignals(symbol, bars, p), p.exits(), initialCash)
+}
+
+// FirstBoardBacktest 首板回调策略回测，交易规则与 N 字策略完全一致。
+func FirstBoardBacktest(symbol string, bars []Candle, p FirstBoardParams, initialCash float64) BacktestResult {
+	return BacktestFromSignals(symbol, bars, FindFirstBoardSignals(symbol, bars, p), p.exits(), initialCash)
+}
+
+// BacktestFromSignals 对任意策略产出的信号执行交易模拟；信号在收盘生成，
+// 次日开盘入场，规避未来函数。单仓位 MVP：持仓期间忽略后续信号。
+func BacktestFromSignals(symbol string, bars []Candle, signals []Signal, x ExitParams, initialCash float64) BacktestResult {
 	if initialCash <= 0 {
 		initialCash = 100000
 	}
-	signals := FindNSignals(symbol, bars, p)
 	if signals == nil {
 		signals = []Signal{} // JSON: [] instead of null
 	}
@@ -177,16 +212,16 @@ func Backtest(symbol string, bars []Candle, p NParams, initialCash float64) Back
 			continue
 		}
 		sell, sellDate, reason := 0.0, "", "max_hold"
-		last := min(i+p.MaxHoldDays-1, len(bars)-1)
+		last := min(i+x.MaxHoldDays-1, len(bars)-1)
 		exitIndex := last
 		for j := i; j <= last; j++ {
-			if bars[j].Low <= buy*(1-p.StopLossPct/100) {
-				sell, sellDate, reason = buy*(1-p.StopLossPct/100), bars[j].Date, "stop_loss"
+			if bars[j].Low <= buy*(1-x.StopLossPct/100) {
+				sell, sellDate, reason = buy*(1-x.StopLossPct/100), bars[j].Date, "stop_loss"
 				exitIndex = j
 				break
 			}
-			if bars[j].High >= buy*(1+p.TakeProfitPct/100) {
-				sell, sellDate, reason = buy*(1+p.TakeProfitPct/100), bars[j].Date, "take_profit"
+			if bars[j].High >= buy*(1+x.TakeProfitPct/100) {
+				sell, sellDate, reason = buy*(1+x.TakeProfitPct/100), bars[j].Date, "take_profit"
 				exitIndex = j
 				break
 			}

@@ -80,7 +80,14 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"status": "ok"}) })
-	mux.HandleFunc("GET /api/params/default", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, market.DefaultParams()) })
+	// strategy=n（通用 N 字，默认）或 zt（首板涨停→缩量回调→放量突破）。
+	mux.HandleFunc("GET /api/params/default", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("strategy") == "zt" {
+			writeJSON(w, 200, market.DefaultFirstBoardParams())
+			return
+		}
+		writeJSON(w, 200, market.DefaultParams())
+	})
 	mux.HandleFunc("GET /api/stocks", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, s.Symbols()) })
 
 	// Stock browser: filtered profiles over the whole market, sortable on
@@ -295,6 +302,10 @@ func main() {
 			errorJSON(w, 404, "stock not found")
 			return
 		}
+		if r.URL.Query().Get("strategy") == "zt" {
+			writeJSON(w, 200, market.FindFirstBoardSignals(symbol, bars, market.DefaultFirstBoardParams()))
+			return
+		}
 		writeJSON(w, 200, market.FindNSignals(symbol, bars, market.DefaultParams()))
 	})
 	mux.HandleFunc("GET /api/stocks/{symbol}/bars", func(w http.ResponseWriter, r *http.Request) {
@@ -309,16 +320,13 @@ func main() {
 	mux.HandleFunc("POST /api/backtests/{symbol}", func(w http.ResponseWriter, r *http.Request) {
 		symbol := strings.ToUpper(r.PathValue("symbol"))
 		req := struct {
-			Params      market.NParams `json:"params"`
-			InitialCash float64        `json:"initialCash"`
-			Days        int            `json:"days"` // >0: 只统计最近 N 个交易日；0: 全部历史
-		}{Params: market.DefaultParams(), InitialCash: 100000}
+			Strategy    string          `json:"strategy"` // "n"（默认）或 "zt"
+			Params      json.RawMessage `json:"params"`   // 留空则用该策略默认参数
+			InitialCash float64         `json:"initialCash"`
+			Days        int             `json:"days"` // >0: 只统计最近 N 个交易日；0: 全部历史
+		}{InitialCash: 100000}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			errorJSON(w, 400, "invalid JSON")
-			return
-		}
-		if err := market.ValidParams(req.Params); err != nil {
-			errorJSON(w, 400, err.Error())
 			return
 		}
 		bars := s.Bars(symbol)
@@ -326,9 +334,91 @@ func main() {
 			errorJSON(w, 404, "stock not found")
 			return
 		}
-		res := market.Backtest(symbol, bars, req.Params, req.InitialCash)
+		var res market.BacktestResult
+		switch req.Strategy {
+		case "", "n":
+			p := market.DefaultParams()
+			if len(req.Params) > 0 {
+				if err := json.Unmarshal(req.Params, &p); err != nil {
+					errorJSON(w, 400, "invalid n params")
+					return
+				}
+			}
+			if err := market.ValidParams(p); err != nil {
+				errorJSON(w, 400, err.Error())
+				return
+			}
+			res = market.Backtest(symbol, bars, p, req.InitialCash)
+		case "zt":
+			p := market.DefaultFirstBoardParams()
+			if len(req.Params) > 0 {
+				if err := json.Unmarshal(req.Params, &p); err != nil {
+					errorJSON(w, 400, "invalid zt params")
+					return
+				}
+			}
+			if err := market.ValidFirstBoardParams(p); err != nil {
+				errorJSON(w, 400, err.Error())
+				return
+			}
+			res = market.FirstBoardBacktest(symbol, bars, p, req.InitialCash)
+		default:
+			errorJSON(w, 400, "unknown strategy: "+req.Strategy)
+			return
+		}
 		res = market.WindowResult(res, bars, req.Days)
 		writeJSON(w, 200, res)
+	})
+
+	// GET /api/screen?days=10 — 全市场 N 字战法筛查：跟踪每只票
+	// 首板→回调(B1)→突破(B2)→回踩(B3) 的存活形态，按各阶段关键日期
+	// 过滤出近 days 个交易日内出现的 setup。ST 与上市过新的票直接排除。
+	mux.HandleFunc("GET /api/screen", func(w http.ResponseWriter, r *http.Request) {
+		days := queryInt(r, "days", 10)
+		p := market.DefaultScreenParams()
+		type screenItem struct {
+			market.ScreenSetup
+			Name     string `json:"name"`
+			Industry string `json:"industry,omitempty"`
+		}
+		items := make([]screenItem, 0, 64)
+		counts := map[string]int{"b1": 0, "b2": 0, "b3": 0}
+		asOf := ""
+		for _, info := range s.Symbols() {
+			sym := info.Symbol
+			bars := s.Bars(sym)
+			if len(bars) < 60 {
+				continue // 上市过新：MA20/量比前置不足
+			}
+			prof, hasProf := s.Profile(sym)
+			if hasProf && strings.Contains(strings.ToUpper(prof.Name), "ST") {
+				continue // ST 5% 限额无法按日线识别，整体排除
+			}
+			start := market.WindowStart(bars, days)
+			for _, setup := range market.FindNSetups(sym, bars, p) {
+				if start != "" && setup.KeyDate < start {
+					continue
+				}
+				counts[setup.Stage]++
+				it := screenItem{ScreenSetup: setup}
+				if hasProf {
+					it.Name, it.Industry = prof.Name, prof.Industry
+				}
+				items = append(items, it)
+				if setup.AsOf > asOf {
+					asOf = setup.AsOf
+				}
+			}
+		}
+		sort.Slice(items, func(i, j int) bool {
+			if items[i].KeyDate != items[j].KeyDate {
+				return items[i].KeyDate > items[j].KeyDate
+			}
+			return items[i].Symbol < items[j].Symbol
+		})
+		writeJSON(w, 200, map[string]any{
+			"asOf": asOf, "windowDays": days, "counts": counts, "items": items,
+		})
 	})
 
 	static, err := fs.Sub(distFS, "web/dist")

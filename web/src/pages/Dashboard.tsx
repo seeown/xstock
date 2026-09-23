@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { api, type BacktestResult, type Candle, type NParams, type Signal, type Trade } from '../api'
+import {
+  api, type BacktestResult, type Candle, type FirstBoardParams, type Signal,
+  type StrategyKind, type StrategyParams, type Trade,
+} from '../api'
 import KlineChart from '../components/KlineChart'
 import PriceChart from '../components/PriceChart'
 import StockProfileCard from '../components/StockProfileCard'
@@ -8,7 +11,15 @@ import {
   Banner, Card, CardHead, Empty, MetricCard, Spinner, exitReasonText, fmt, money, pct,
 } from '../components/ui'
 
-const signalFields: Array<{ key: keyof NParams; label: string; unit: string; step?: number; min: number }> = [
+interface ParamField {
+  key: string
+  label: string
+  unit: string
+  step?: number
+  min: number
+}
+
+const nSignalFields: ParamField[] = [
   { key: 'riseDays', label: '上涨周期', unit: '天', min: 2 },
   { key: 'riseMinPct', label: '最小涨幅', unit: '%', step: 0.1, min: 0.1 },
   { key: 'pullbackMinDays', label: '最短回调', unit: '天', min: 1 },
@@ -18,15 +29,39 @@ const signalFields: Array<{ key: keyof NParams; label: string; unit: string; ste
   { key: 'volumeRatioMin', label: '突破量比', unit: '×', step: 0.1, min: 0.1 },
 ]
 
-const tradeFields: Array<{ key: keyof NParams; label: string; unit: string; step?: number; min: number }> = [
+// 首板回调：量比均为标准口径（当日量 ÷ 前 5 日均量）。
+const ztSignalFields: ParamField[] = [
+  { key: 'boardLookbackDays', label: '首板回看', unit: '天', min: 1 },
+  { key: 'boardVolRatioMin', label: '板日量比下限', unit: '×', step: 0.1, min: 0.1 },
+  { key: 'boardVolRatioMax', label: '板日量比上限', unit: '×', step: 0.1, min: 0.5 },
+  { key: 'pullbackMinDays', label: '最短回调', unit: '天', min: 1 },
+  { key: 'pullbackMaxDays', label: '最长回调', unit: '天', min: 1 },
+  { key: 'pullbackMaxPct', label: '最大回撤', unit: '%', step: 0.1, min: 0.1 },
+  { key: 'pullbackVolRatioMax', label: '回调量比上限', unit: '×', step: 0.05, min: 0.1 },
+  { key: 'breakoutVolRatioMin', label: '突破量比下限', unit: '×', step: 0.1, min: 0.1 },
+  { key: 'breakoutVolRatioMax', label: '突破量比上限', unit: '×', step: 0.1, min: 0.5 },
+]
+
+const tradeFields: ParamField[] = [
   { key: 'stopLossPct', label: '止损线', unit: '%', step: 0.1, min: 0.1 },
   { key: 'takeProfitPct', label: '止盈线', unit: '%', step: 0.1, min: 0.1 },
   { key: 'maxHoldDays', label: '最长持仓', unit: '天', min: 1 },
 ]
 
+const strategyMeta: Record<StrategyKind, { label: string; signalLabel: string; fields: ParamField[] }> = {
+  n: { label: '通用 N 字', signalLabel: 'N 字', fields: nSignalFields },
+  zt: { label: '首板回调', signalLabel: '首板回调', fields: ztSignalFields },
+}
+
 interface Feedback {
   text: string
   kind: 'info' | 'error' | 'success'
+}
+
+// 两种策略参数结构不同，参数面板按字符串键取数值字段。
+function numAt(params: StrategyParams, key: string): number {
+  const v = (params as unknown as Record<string, unknown>)[key]
+  return typeof v === 'number' ? v : 0
 }
 
 export default function Dashboard() {
@@ -35,7 +70,8 @@ export default function Dashboard() {
 
   const [symbolInput, setSymbolInput] = useState(initialSymbol)
   const [activeSymbol, setActiveSymbol] = useState(initialSymbol)
-  const [params, setParams] = useState<NParams | null>(null)
+  const [strategy, setStrategy] = useState<StrategyKind>('n')
+  const [params, setParams] = useState<StrategyParams | null>(null)
   const [windowDays, setWindowDays] = useState(10)
   const [allHistory, setAllHistory] = useState(false)
   const [focus, setFocus] = useState<{ from: string; to: string; label: string; trade?: Trade; signal?: Signal } | null>(null)
@@ -66,7 +102,7 @@ export default function Dashboard() {
   const [running, setRunning] = useState(false)
   const [feedback, setFeedback] = useState<Feedback>({ text: '', kind: 'info' })
 
-  const run = useCallback(async (sym: string, p: NParams) => {
+  const run = useCallback(async (sym: string, p: StrategyParams, strat: StrategyKind) => {
     const symbol = sym.trim().toUpperCase()
     if (!symbol) {
       setFeedback({ text: '请输入股票代码。', kind: 'error' })
@@ -75,16 +111,16 @@ export default function Dashboard() {
     setRunning(true)
     const days = allHistory ? 0 : Math.max(1, windowDays || 1)
     const scope = days > 0 ? `近 ${days} 个交易日` : '全部历史'
-    setFeedback({ text: `正在回测 ${symbol}（${scope}）…`, kind: 'info' })
+    setFeedback({ text: `正在回测 ${symbol} · ${strategyMeta[strat].label}（${scope}）…`, kind: 'info' })
     try {
-      const [bt, barData] = await Promise.all([api.backtest(symbol, p, days), api.bars(symbol)])
+      const [bt, barData] = await Promise.all([api.backtest(symbol, p, days, strat), api.bars(symbol)])
       setResult(bt)
       setBars(barData)
       barsRef.current = barData
       setFocus(null)
       setActiveSymbol(symbol)
       const windowNote = bt.windowStart ? `，区间 ${bt.windowStart} ~ ${barData[barData.length - 1]?.date ?? ''}` : ''
-      setFeedback({ text: `回测完成（${scope}${windowNote}）：${symbol} 发现 ${(bt.signals ?? []).length} 个 N 字信号。`, kind: 'success' })
+      setFeedback({ text: `回测完成（${scope}${windowNote}）：${symbol} 发现 ${(bt.signals ?? []).length} 个${strategyMeta[strat].signalLabel}信号。`, kind: 'success' })
     } catch (e) {
       setResult(null)
       setBars([])
@@ -98,14 +134,28 @@ export default function Dashboard() {
     }
   }, [allHistory, windowDays])
 
+  // 切换策略：拉取该策略默认参数并立即重跑当前标的。
+  const switchStrategy = useCallback(async (kind: StrategyKind) => {
+    if (kind === strategy || running) return
+    try {
+      const p = await api.defaultParams(kind)
+      setStrategy(kind)
+      setParams(p)
+      await run(symbolInput, p, kind)
+    } catch {
+      setFeedback({ text: '无法获取策略默认参数。', kind: 'error' })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [strategy, running, symbolInput, run])
+
   // 默认参数只在挂载/切换标的时加载一次——绝不能依赖 run（它随
   // allHistory/windowDays 变化，否则切换「全部历史」会重置用户改过的参数）。
   useEffect(() => {
     ;(async () => {
       try {
-        const p = await api.defaultParams()
+        const p = await api.defaultParams('n')
         setParams(p)
-        await run(initialSymbol, p)
+        await run(initialSymbol, p, 'n')
       } catch {
         setFeedback({ text: '无法连接后端服务。', kind: 'error' })
       }
@@ -121,7 +171,7 @@ export default function Dashboard() {
       scopeBooted.current = true
       return
     }
-    if (params) run(activeSymbol, params)
+    if (params) run(activeSymbol, params, strategy)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allHistory])
 
@@ -159,11 +209,11 @@ export default function Dashboard() {
           <input
             value={symbolInput}
             onChange={e => setSymbolInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && !disabled && run(symbolInput, params)}
+            onKeyDown={e => e.key === 'Enter' && !disabled && run(symbolInput, params, strategy)}
             placeholder="000021.SZ"
             spellCheck={false}
           />
-          <button className="btn primary" onClick={() => run(symbolInput, params)} disabled={disabled}>
+          <button className="btn primary" onClick={() => run(symbolInput, params, strategy)} disabled={disabled}>
             {running ? '回测中…' : '运行回测'}
           </button>
         </div>
@@ -220,10 +270,13 @@ export default function Dashboard() {
                     </>
                   ) : focus.signal ? (
                     <>
+                      {focus.signal.boardDate && (
+                        <span>首板 <b>{focus.signal.boardDate}</b>（{focus.signal.limitPct?.toFixed(0)}% 板 · 量比 {focus.signal.boardVolRatio?.toFixed(1)}×）</span>
+                      )}
                       <span>突破 <b>{focus.signal.breakoutPrice.toFixed(2)}</b></span>
                       <span>量比 {focus.signal.volumeRatio.toFixed(1)}×</span>
                       <span>段内涨 {focus.signal.risePct.toFixed(1)}%</span>
-                      <span>回调 {focus.signal.pullbackPct.toFixed(1)}%</span>
+                      <span>回调 {focus.signal.pullbackPct.toFixed(1)}%{focus.signal.pullbackDays ? ` / ${focus.signal.pullbackDays} 天` : ''}</span>
                       <span className={focus.signal.dayChangePct >= 0 ? 'pos' : 'neg'}>当日 {focus.signal.dayChangePct >= 0 ? '+' : ''}{focus.signal.dayChangePct.toFixed(2)}%</span>
                     </>
                   ) : null}
@@ -245,26 +298,47 @@ export default function Dashboard() {
           </Card>
 
           <Card>
-            <CardHead title="N 字候选信号" right={<span className="count-pill">{(result?.signals ?? []).length} 个</span>} />
+            <CardHead title={`${strategyMeta[strategy].label}候选信号`} right={<span className="count-pill">{(result?.signals ?? []).length} 个</span>} />
             {(result?.signals ?? []).length ? (
               <div className="table-wrap">
                 <table>
                   <thead>
-                    <tr>
-                      <th>信号日期</th><th className="num">突破价</th><th className="num">涨幅</th><th className="num">当日涨跌</th>
-                      <th className="num">回撤</th><th className="num">量比</th><th>说明</th>
-                    </tr>
+                    {strategy === 'zt' ? (
+                      <tr>
+                        <th>信号日期</th><th>首板日</th><th className="num">板日量比</th><th className="num">回调</th>
+                        <th className="num">回调量比</th><th className="num">突破价</th><th className="num">突破量比</th>
+                        <th className="num">当日涨跌</th><th>说明</th>
+                      </tr>
+                    ) : (
+                      <tr>
+                        <th>信号日期</th><th className="num">突破价</th><th className="num">涨幅</th><th className="num">当日涨跌</th>
+                        <th className="num">回撤</th><th className="num">量比</th><th>说明</th>
+                      </tr>
+                    )}
                   </thead>
                   <tbody>
                     {(result?.signals ?? []).map(s => (
                       <tr key={s.date} className="row-clickable" title="点击在K线图中聚焦这个信号"
-                          onClick={() => focusAt(s.date, undefined, `${s.date} 信号`, { signal: s })}>
+                          onClick={() => focusAt(s.date, s.boardDate, `${s.date} 信号`, { signal: s })}>
                         <td>{s.date}</td>
+                        {strategy === 'zt' && (
+                          <>
+                            <td>{s.boardDate}{s.strongWash && <span className="wash-star" title="洗盘金标准：回调量缩到板日量的 1/3 以下"> ★</span>}</td>
+                            <td className="num">{fmt(s.boardVolRatio ?? 0)}×</td>
+                            <td className="num">{s.pullbackDays ?? '—'}天 / {pct(s.pullbackPct)}</td>
+                            <td className="num">{fmt(s.pullbackVolRatio ?? 0)}×</td>
+                          </>
+                        )}
                         <td className="num">{fmt(s.breakoutPrice)}</td>
-                        <td className="num pos">{pct(s.risePct)}</td>
-                        <td className={`num ${s.dayChangePct >= 0 ? 'pos' : 'neg'}`}>{s.dayChangePct >= 0 ? '+' : ''}{pct(s.dayChangePct)}</td>
-                        <td className="num">{pct(s.pullbackPct)}</td>
+                        {strategy === 'n' && <td className="num pos">{pct(s.risePct)}</td>}
+                        {strategy === 'n' && (
+                          <td className={`num ${s.dayChangePct >= 0 ? 'pos' : 'neg'}`}>{s.dayChangePct >= 0 ? '+' : ''}{pct(s.dayChangePct)}</td>
+                        )}
+                        {strategy === 'n' && <td className="num">{pct(s.pullbackPct)}</td>}
                         <td className="num">{fmt(s.volumeRatio)}×</td>
+                        {strategy === 'zt' && (
+                          <td className={`num ${s.dayChangePct >= 0 ? 'pos' : 'neg'}`}>{s.dayChangePct >= 0 ? '+' : ''}{pct(s.dayChangePct)}</td>
+                        )}
                         <td>{s.reason}</td>
                       </tr>
                     ))}
@@ -273,7 +347,7 @@ export default function Dashboard() {
               </div>
             ) : (
               <>
-                <Empty text="当前时间范围内未发现 N 字信号" />
+                <Empty text={`当前时间范围内未发现${strategyMeta[strategy].label}信号`} />
                 {!allHistory && (
                   <div className="empty-action">
                     <button className="btn ghost small" onClick={() => setAllHistory(true)}>
@@ -329,8 +403,20 @@ export default function Dashboard() {
         <aside className="params-panel">
           <Card className="sticky">
             <CardHead title="策略参数" sub="修改后点击「运行回测」生效" />
+            <div className="strategy-switch">
+              {(Object.keys(strategyMeta) as StrategyKind[]).map(kind => (
+                <button
+                  key={kind}
+                  className={`btn small ${strategy === kind ? 'primary' : 'ghost'}`}
+                  disabled={running}
+                  onClick={() => switchStrategy(kind)}
+                >
+                  {strategyMeta[kind].label}
+                </button>
+              ))}
+            </div>
             <h3 className="group-title">信号识别</h3>
-            {signalFields.map(f => (
+            {strategyMeta[strategy].fields.map(f => (
               <label key={f.key} className="param-field">
                 <span>{f.label}</span>
                 <span className="param-input">
@@ -338,13 +424,27 @@ export default function Dashboard() {
                     type="number"
                     min={f.min}
                     step={f.step ?? 1}
-                    value={params[f.key] > 0 ? params[f.key] : ''}
-                    onChange={e => setParams({ ...params, [f.key]: Number(e.target.value) })}
+                    value={numAt(params, f.key) > 0 ? numAt(params, f.key) : ''}
+                    onChange={e => setParams({ ...params, [f.key]: Number(e.target.value) } as StrategyParams)}
                   />
                   <em>{f.unit}</em>
                 </span>
               </label>
             ))}
+            {strategy === 'zt' && (
+              <label className="param-field">
+                <span>排除一字首板</span>
+                <span className="param-input">
+                  <input
+                    type="checkbox"
+                    className="param-check"
+                    checked={(params as FirstBoardParams).excludeOneWordBoard}
+                    onChange={e => setParams({ ...params, excludeOneWordBoard: e.target.checked } as StrategyParams)}
+                  />
+                  <em>{(params as FirstBoardParams).excludeOneWordBoard ? '排除' : '不排除'}</em>
+                </span>
+              </label>
+            )}
             <h3 className="group-title">交易规则</h3>
             {tradeFields.map(f => (
               <label key={f.key} className="param-field">
@@ -354,8 +454,8 @@ export default function Dashboard() {
                     type="number"
                     min={f.min}
                     step={f.step ?? 1}
-                    value={params[f.key] > 0 ? params[f.key] : ''}
-                    onChange={e => setParams({ ...params, [f.key]: Number(e.target.value) })}
+                    value={numAt(params, f.key) > 0 ? numAt(params, f.key) : ''}
+                    onChange={e => setParams({ ...params, [f.key]: Number(e.target.value) } as StrategyParams)}
                   />
                   <em>{f.unit}</em>
                 </span>
@@ -389,7 +489,7 @@ export default function Dashboard() {
                 <em>{allHistory ? '全部历史' : `近 ${Math.max(1, windowDays || 1)} 日`}</em>
               </span>
             </label>
-            <button className="btn primary block" onClick={() => run(symbolInput, params)} disabled={disabled}>
+            <button className="btn primary block" onClick={() => run(symbolInput, params, strategy)} disabled={disabled}>
               {running ? '回测中…' : '运行回测'}
             </button>
             <p className="param-hint">信号收盘后生成，按下一交易日开盘价模拟成交，规避未来函数。</p>

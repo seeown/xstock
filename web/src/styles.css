@@ -367,6 +367,63 @@ td.num, th.num { text-align: right; }
   letter-spacing: 1px;
 }
 .group-title:first-of-type { margin-top: 4px; }
+.strategy-switch { display: flex; gap: 8px; margin: 12px 0 2px; }
+.strategy-switch .btn { flex: 1; }
+.screen-tabs { margin-bottom: 14px; }
+
+/* ---------- 悬浮K线预览 / 形态详情弹窗 ---------- */
+.kline-pop {
+  position: fixed; z-index: 60;
+  width: 560px; max-width: calc(100vw - 16px);
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  pointer-events: none; /* 纯预览：不拦截鼠标，避免悬浮抖动 */
+}
+.kline-pop-head {
+  padding: 8px 12px;
+  font-size: 12.5px; color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.kline-pop-head b { color: var(--ink); }
+.kline-pop-loading {
+  height: 240px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--faint); font-size: 12.5px;
+}
+.modal-mask {
+  position: fixed; inset: 0; z-index: 70;
+  background: rgba(4, 8, 16, 0.62);
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-card {
+  width: min(920px, calc(100vw - 48px));
+  max-height: calc(100vh - 64px);
+  overflow: auto;
+}
+.modal-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px 16px;
+  margin-top: 14px;
+}
+.modal-facts .fact {
+  display: flex; justify-content: space-between; gap: 8px;
+  padding: 7px 10px;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+.modal-facts .fact span { color: var(--faint); }
+.modal-facts .fact b { color: var(--ink); font-weight: 600; }
+
+.pager { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 14px 0 2px; }
+.pager .muted { font-size: 12.5px; }
+.wash-star { color: #f5b544; }
 .param-field {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px;
@@ -399,6 +456,13 @@ td.num, th.num { text-align: right; }
 
 /* ---------- Strategy page ---------- */
 .rule-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-bottom: 18px; }
+.strategy-section-title {
+  display: flex; align-items: baseline; gap: 10px;
+  margin: 6px 0 14px;
+  font-size: 16px;
+}
+.strategy-section-title span { font-size: 12.5px; font-weight: 400; color: var(--faint); }
+.strategy-section-title:not(:first-of-type) { margin-top: 26px; }
 .rule-card { position: relative; overflow: hidden; margin-bottom: 0; }
 .rule-card h3 { margin: 14px 0 8px; font-size: 15px; }
 .rule-card p { margin: 0; color: var(--muted); font-size: 13px; }
