@@ -11,6 +11,20 @@ const DOWN_COLOR = '#22c58b'
 const GOLD = '#f5b544'
 const ORANGE = '#ff9600'
 
+// klinecharts 的 overlay 文字默认样式是「品牌蓝实底(#1677FF)+白字」，
+// 且自定义样式是增量合并——不显式清零背景/边框/内边距，文字后面会
+// 永远衬一块蓝底（用户看到的正是它）。
+function plainText(color: string, size = 10) {
+  return {
+    color, size,
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+    borderSize: 0,
+    borderRadius: 0,
+    paddingLeft: 0, paddingRight: 0, paddingTop: 0, paddingBottom: 0,
+  }
+}
+
 // ztline 价位线：两个同价位锚点横跨窗口首尾，右端带文字标签；
 // textOnly 模式只画文字不画线（前高线横穿全图压在蜡烛上不可读，只留文字）。
 let ztlineRegistered = false
@@ -49,7 +63,7 @@ function ensureZtLegend() {
       return d.rows.map((row, i) => ({
         type: 'text',
         attrs: { x: c1.x - 6, y: c1.y + 8 + i * 16, text: row.text, align: 'right', baseline: 'top' },
-        styles: { color: row.color, size: 10 },
+        styles: plainText(row.color),
         ignoreEvent: true,
       }))
     },
@@ -71,11 +85,11 @@ function ensureZtBand() {
       const y = Math.min(c0.y, c1.y)
       const h = Math.max(2, Math.abs(c0.y - c1.y))
       return [
-        { type: 'rect', attrs: { x: c0.x, y, width: c1.x - c0.x, height: h }, styles: { style: 'fill', color: 'rgba(245,181,68,0.10)' }, ignoreEvent: true },
+        { type: 'rect', attrs: { x: c0.x, y, width: c1.x - c0.x, height: h }, styles: { style: 'fill', color: 'rgba(245,181,68,0.10)', borderColor: 'transparent', borderSize: 0 }, ignoreEvent: true },
         {
           type: 'text',
           attrs: { x: c0.x + 6, y: y + 3, text: '低吸区', align: 'left', baseline: 'top' },
-          styles: { color: GOLD, size: 10 },
+          styles: plainText(GOLD),
           ignoreEvent: true,
         },
       ]
@@ -101,8 +115,8 @@ function ensureZtMark() {
         const y = Math.min(c.y, c1.y)
         const h = Math.max(2, Math.abs(c.y - c1.y))
         return [
-          { type: 'rect', attrs: { x: c.x - 6, y, width: 12, height: h }, styles: { style: 'stroke', color: d.color, borderSize: 1.5 }, ignoreEvent: true },
-          { type: 'text', attrs: { x: c.x, y: y - 3, text: d.label || '板', align: 'center', baseline: 'bottom' }, styles: { color: d.color, size: 11, weight: 'bold' }, ignoreEvent: true },
+          { type: 'rect', attrs: { x: c.x - 6, y, width: 12, height: h }, styles: { style: 'stroke', color: d.color, borderColor: d.color, borderSize: 1.5 }, ignoreEvent: true },
+          { type: 'text', attrs: { x: c.x, y: y - 3, text: d.label || '板', align: 'center', baseline: 'bottom' }, styles: { ...plainText(d.color, 11), weight: 'bold' }, ignoreEvent: true },
         ]
       }
       if (d.kind === 'breakout') {
@@ -115,15 +129,15 @@ function ensureZtMark() {
               { x: c.x, y: cy - size }, { x: c.x + size, y: cy },
               { x: c.x, y: cy + size }, { x: c.x - size, y: cy },
             ] },
-            styles: { style: 'fill', color: d.color },
+            styles: { style: 'fill', color: d.color, borderColor: 'transparent', borderSize: 0 },
             ignoreEvent: true,
           },
-          { type: 'text', attrs: { x: c.x, y: cy + size + 3, text: d.label || '突破', align: 'center', baseline: 'top' }, styles: { color: d.color, size: 10 }, ignoreEvent: true },
+          { type: 'text', attrs: { x: c.x, y: cy + size + 3, text: d.label || '突破', align: 'center', baseline: 'top' }, styles: plainText(d.color), ignoreEvent: true },
         ]
       }
       // star
       return [
-        { type: 'text', attrs: { x: c.x, y: c.y + 5, text: '★', align: 'center', baseline: 'top' }, styles: { color: d.color, size: 12, weight: 'bold' }, ignoreEvent: true },
+        { type: 'text', attrs: { x: c.x, y: c.y + 5, text: '★', align: 'center', baseline: 'top' }, styles: { ...plainText(d.color, 12), weight: 'bold' }, ignoreEvent: true },
       ]
     },
   })

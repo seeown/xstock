@@ -14,6 +14,19 @@ const MA_COLORS = ['#FF9600', '#935EBD', '#4C6BF5', '#E11D74', '#01C5C4', '#F5B5
 const UP_COLOR = '#f4577a'
 const DOWN_COLOR = '#22c58b'
 
+// klinecharts 的 overlay 文字默认带品牌蓝实底(#1677FF)+白字，自定义样式
+// 增量合并——必须显式清零背景/边框/内边距，否则文字后面衬一块蓝底。
+function plainText(color: string, size: number, weight = 'normal') {
+  return {
+    color, size, weight,
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+    borderSize: 0,
+    borderRadius: 0,
+    paddingLeft: 0, paddingRight: 0, paddingTop: 0, paddingBottom: 0,
+  }
+}
+
 // SMA over closes, shared with page-level stat tiles.
 export function computeMA(bars: Candle[], period: number): Array<number | null> {
   const out: Array<number | null> = []
@@ -52,7 +65,7 @@ function ensureNsEvent() {
         figures.push({
           type: 'rect',
           attrs: { x: c.x - 6, y, width: 12, height: h },
-          styles: { style: 'stroke', color: d.ring, borderSize: 1.5 },
+          styles: { style: 'stroke', color: d.ring, borderColor: d.ring, borderSize: 1.5 },
           ignoreEvent: true,
         })
       }
@@ -62,7 +75,7 @@ function ensureNsEvent() {
         figures.push({
           type: 'text',
           attrs: { x: c.x, y: c.y + gap, text: 'B', align: 'center', baseline: 'top' },
-          styles: { color: d.color, size: 13, weight: 'bold' },
+          styles: plainText(d.color, 13, 'bold'),
           ignoreEvent: true,
         })
       } else if (d.kind === 'sell') {
@@ -70,7 +83,7 @@ function ensureNsEvent() {
         figures.push({
           type: 'text',
           attrs: { x: c.x, y: c.y - gap, text: 'S', align: 'center', baseline: 'bottom' },
-          styles: { color: d.color, size: 13, weight: 'bold' },
+          styles: plainText(d.color, 13, 'bold'),
           ignoreEvent: true,
         })
       } else if (d.kind === 'board' && c1) {
@@ -78,7 +91,7 @@ function ensureNsEvent() {
         figures.push({
           type: 'text',
           attrs: { x: c.x, y: c1.y - gap, text: '板', align: 'center', baseline: 'bottom' },
-          styles: { color: d.color, size: 11, weight: 'bold' },
+          styles: plainText(d.color, 11, 'bold'),
           ignoreEvent: true,
         })
       } else {
@@ -91,14 +104,14 @@ function ensureNsEvent() {
             { x: c.x, y: cy - size }, { x: c.x + size, y: cy },
             { x: c.x, y: cy + size }, { x: c.x - size, y: cy },
           ] },
-          styles: { style: 'fill', color: d.color },
+          styles: { style: 'fill', color: d.color, borderColor: 'transparent', borderSize: 0 },
           ignoreEvent: true,
         })
         if (d.label) {
           figures.push({
             type: 'text',
             attrs: { x: c.x, y: cy + size + 10, text: d.label, align: 'center', baseline: 'top' },
-            styles: { color: d.color, size: 10 },
+            styles: plainText(d.color, 10),
             ignoreEvent: true,
           })
         }
@@ -132,7 +145,7 @@ function ensureNsMark() {
             { x: c.x + size, y: c.y - gap },
           ]
       return [
-        { type: 'polygon', attrs: { coordinates: tri }, styles: { style: 'fill', color: d.color } },
+        { type: 'polygon', attrs: { coordinates: tri }, styles: { style: 'fill', color: d.color, borderColor: 'transparent', borderSize: 0 } },
       ]
     },
   })
