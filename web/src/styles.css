@@ -440,23 +440,24 @@ td.num, th.num { text-align: right; }
 
 /* ---------- 情绪指南 ---------- */
 .guide-verdict {
-  display: flex; gap: 18px; align-items: stretch;
-  padding: 18px;
+  display: flex; gap: 16px; align-items: stretch;
+  padding: 14px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 12px;
   margin-bottom: 16px;
 }
 .gv-score {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  min-width: 150px; padding: 0 18px;
+  display: flex; align-items: center; gap: 12px;
+  min-width: 0; padding: 2px 14px 2px 4px;
   border-right: 1px solid var(--line);
 }
-.gv-num { font-size: 52px; font-weight: 700; line-height: 1; color: var(--ink); }
+.gv-num { font-size: 30px; font-weight: 700; line-height: 1; color: var(--ink); }
 .gv-score.pos .gv-num { color: #f4577a; }
 .gv-score.neg .gv-num { color: #22c58b; }
-.gv-stage { font-size: 16px; font-weight: 600; margin-top: 6px; }
-.gv-quadrant { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.gv-meta { display: flex; flex-direction: column; gap: 3px; }
+.gv-stage { font-size: 14px; font-weight: 600; }
+.gv-quadrant { font-size: 11.5px; color: var(--muted); }
 .guide-tiles {
   flex: 1;
   display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));

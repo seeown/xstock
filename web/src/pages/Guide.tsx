@@ -104,8 +104,10 @@ export default function Guide() {
       <div className="guide-verdict">
         <div className={`gv-score ${stageTone[rt.stage] ?? ''}`}>
           <span className="gv-num">{rt.tempScore.toFixed(0)}</span>
-          <span className="gv-stage">{rt.stage}</span>
-          <span className="gv-quadrant">{rt.quadrant}</span>
+          <span className="gv-meta">
+            <span className="gv-stage">{rt.stage}</span>
+            <span className="gv-quadrant">{rt.quadrant}</span>
+          </span>
         </div>
         <div className="guide-tiles">
           {([
