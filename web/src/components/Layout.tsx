@@ -43,8 +43,8 @@ const icons = {
 const navItems = [
   { to: '/', label: '回测分析', icon: icons.dashboard, end: true },
   { to: '/screen', label: '股票筛查', icon: icons.screen },
-  { to: '/stocks', label: '个股行情', icon: icons.stocks },
   { to: '/market', label: '大盘行情', icon: icons.market },
+  { to: '/stocks', label: '个股行情', icon: icons.stocks },
   { to: '/data', label: '数据管理', icon: icons.data },
   { to: '/strategy', label: '策略说明', icon: icons.strategy },
 ]

@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { api, type Candle, type IndexInfo, type SentimentResult, type SectorsResult } from '../api'
+import { api, type Candle, type IndexInfo, type SectorRow, type SentimentResult, type SectorsResult } from '../api'
 import KlineChart, { computeMA } from '../components/KlineChart'
 import { Banner, Card, CardHead, Sparkline, fmt, pct } from '../components/ui'
+
+// 板块表可排序列（数值列，默认降序）。
+type SectorSortKey = 'limitUp' | 'avgChange' | 'count'
 
 type RangeKey = '60' | '250' | '750' | 'all'
 
@@ -22,6 +25,27 @@ export default function Market() {
   const [feedback, setFeedback] = useState<{ text: string; kind: 'info' | 'error' | 'success' }>({ text: '', kind: 'info' })
   const [sent, setSent] = useState<SentimentResult | null>(null)
   const [sectors, setSectors] = useState<SectorsResult | null>(null)
+  const [sortKey, setSortKey] = useState<SectorSortKey>('limitUp')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+
+  const toggleSort = (key: SectorSortKey) => {
+    if (sortKey === key) {
+      setSortOrder(prev => (prev === 'desc' ? 'asc' : 'desc'))
+      return
+    }
+    setSortKey(key)
+    setSortOrder('desc')
+  }
+  const sortIndicator = (key: SectorSortKey) => (sortKey === key ? (sortOrder === 'desc' ? ' ▼' : ' ▲') : '')
+  const sortedSectors = (rows: SectorRow[]): SectorRow[] => {
+    const list = [...rows]
+    list.sort((a, b) => {
+      const d = a[sortKey] - b[sortKey]
+      if (d !== 0) return sortOrder === 'desc' ? -d : d
+      return a.name < b.name ? -1 : 1
+    })
+    return list
+  }
 
   // 情绪 + 板块：首算可能要几秒（全市场扫描），之后每分钟随快照刷新。
   useEffect(() => {
@@ -252,12 +276,15 @@ export default function Market() {
               <table>
                 <thead>
                   <tr>
-                    <th>行业</th><th className="num">家数</th><th className="num">平均涨幅</th>
-                    <th className="num">涨停</th><th className="num">近5日涨停</th><th>等权指数(60日)</th>
+                    <th>行业</th>
+                    <th className={`sortable num${sortKey === 'count' ? ' sorted' : ''}`} onClick={() => toggleSort('count')}>家数{sortIndicator('count')}</th>
+                    <th className={`sortable num${sortKey === 'avgChange' ? ' sorted' : ''}`} onClick={() => toggleSort('avgChange')}>平均涨幅{sortIndicator('avgChange')}</th>
+                    <th className={`sortable num${sortKey === 'limitUp' ? ' sorted' : ''}`} onClick={() => toggleSort('limitUp')}>涨停{sortIndicator('limitUp')}</th>
+                    <th className="num">近5日涨停</th><th>等权指数(60日)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sectors.byIndustry.slice(0, 20).map(r => (
+                  {sortedSectors(sectors.byIndustry).slice(0, 20).map(r => (
                     <tr key={r.name} className={sectors.mainline === r.name ? 'mainline-row' : ''}>
                       <td>
                         {r.name}
@@ -279,12 +306,15 @@ export default function Market() {
                 <table>
                   <thead>
                     <tr>
-                      <th>概念</th><th className="num">家数</th><th className="num">平均涨幅</th>
-                      <th className="num">涨停</th><th className="num">近5日涨停</th><th>等权指数(60日)</th>
+                      <th>概念</th>
+                      <th className={`sortable num${sortKey === 'count' ? ' sorted' : ''}`} onClick={() => toggleSort('count')}>家数{sortIndicator('count')}</th>
+                      <th className={`sortable num${sortKey === 'avgChange' ? ' sorted' : ''}`} onClick={() => toggleSort('avgChange')}>平均涨幅{sortIndicator('avgChange')}</th>
+                      <th className={`sortable num${sortKey === 'limitUp' ? ' sorted' : ''}`} onClick={() => toggleSort('limitUp')}>涨停{sortIndicator('limitUp')}</th>
+                      <th className="num">近5日涨停</th><th>等权指数(60日)</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(sectors.byConcept ?? []).slice(0, 15).map(r => (
+                    {sortedSectors(sectors.byConcept ?? []).slice(0, 15).map(r => (
                       <tr key={r.name}>
                         <td>{r.name}</td>
                         <td className="num">{r.count}</td>
