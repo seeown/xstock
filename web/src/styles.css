@@ -463,8 +463,9 @@ td.num, th.num { text-align: right; }
 .gt-stage { font-style: normal; font-size: 12px; font-weight: 500; color: var(--muted); }
 .gt-tile b.pos .gt-stage { color: #ffb1c1; }
 .gt-tile b.neg .gt-stage { color: #7ce3bb; }
-.linechart-wrap { padding: 6px 2px 0; }
-.linechart { width: 100%; display: block; }
+.linechart-wrap { padding: 6px 2px 0; overflow-x: auto; }
+/* 固定像素尺寸：浏览器窗口缩放时图不跟着变大变小，窄窗口内横向滚动。 */
+.linechart { width: 960px; max-width: none; display: block; flex: none; }
 .linechart-legend { display: flex; gap: 18px; padding: 4px 8px 10px; flex-wrap: wrap; }
 .lc-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
 .lc-item i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
