@@ -8,7 +8,7 @@ const stageTone: Record<string, string> = {
 
 // 双轴折线图：左轴家数、右轴成交额（亿）。纯 SVG。
 function LineChart({
-  labels, series, height = 320,
+  labels, series, height = 220,
 }: {
   labels: string[]
   series: Array<{ name: string; color: string; data: number[]; axis: 'left' | 'right' }>
@@ -144,7 +144,7 @@ export default function Guide() {
       <Card>
         <CardHead title="情绪温度分（近30个交易日）" sub="涨停30% + 炸板率20% + 晋级率20% + 量能15% + 高度15 · 冰点<20 低迷<40 中性<60 活跃<80 亢奋≥80" />
         <LineChart
-          height={240}
+          height={180}
           labels={hist.map(d => d.date)}
           series={[
             { name: '温度分', color: '#9ec1ff', axis: 'left', data: hist.map(d => d.tempScore) },
