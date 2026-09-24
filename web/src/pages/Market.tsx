@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { api, type Candle, type IndexInfo, type SectorRow, type SentimentResult, type SectorsResult } from '../api'
+import { useNavigate } from 'react-router-dom'
+import { api, type Candle, type IndexInfo, type LadderStock, type SectorRow, type SentimentResult, type SectorsResult } from '../api'
 import KlineChart, { computeMA } from '../components/KlineChart'
+import { KlineDetailModal, KlinePopover, useKlinePreview } from '../components/klinePreview'
 import { Banner, Card, CardHead, Sparkline, fmt, pct } from '../components/ui'
 
 // 板块表可排序列（数值列，默认降序）。
@@ -27,6 +29,10 @@ export default function Market() {
   const [sectors, setSectors] = useState<SectorsResult | null>(null)
   const [sortKey, setSortKey] = useState<SectorSortKey>('limitUp')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+
+  // 梯队选手 chip 点击弹出该票K线（共享预览组件）
+  const navigate = useNavigate()
+  const kline = useKlinePreview()
 
   const toggleSort = (key: SectorSortKey) => {
     if (sortKey === key) {
@@ -260,6 +266,69 @@ export default function Market() {
         )}
       </Card>
 
+      {/* ---- 连板梯队：每档晋级率 + 全量选手 ---- */}
+      <Card>
+        <CardHead
+          title="连板梯队"
+          sub={
+            sent?.ladder
+              ? `按昨日梯队从高到低 · ${sent.ladder.final ? '收盘定格' : '盘中进行时（未封仍可能回封）'} · 点击选手看K线`
+              : '加载中…'
+          }
+        />
+        {sent?.ladder ? (
+          <div className="ladder">
+            {sent.ladder.tiers.map(t => (
+              <div key={t.height} className="ladder-tier">
+                <div className="tier-head">
+                  <b className="tier-name">{t.height === 1 ? '昨日首板' : `昨日 ${t.height} 板`}</b>
+                  <span className="muted">{t.total} 只 → 晋级 {t.promoted.length} 只</span>
+                  <span className={`tier-rate ${t.promoteRate >= 30 ? 'pos' : t.promoteRate < 15 ? 'neg' : ''}`}>
+                    {pct(t.promoteRate)}
+                  </span>
+                </div>
+                <div className="tier-body">
+                  {t.promoted.length > 0 && (
+                    <div className="tier-group">
+                      <em className="ok">晋级</em>
+                      <span className="chips">
+                        {t.promoted.map(s => <LadderChip key={s.symbol} s={s} onPick={kline.openDetail} />)}
+                      </span>
+                    </div>
+                  )}
+                  {t.failed.length > 0 && (
+                    <div className="tier-group">
+                      <em className="fail">失败</em>
+                      <span className="chips">
+                        {t.failed.map(s => <LadderChip key={s.symbol} s={s} failed onPick={kline.openDetail} />)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+            {sent.ladder.newBoards.length > 0 && (
+              <div className="ladder-tier new-boards">
+                <div className="tier-head">
+                  <b className="tier-name">今日新晋首板</b>
+                  <span className="muted">{sent.ladder.newBoards.length} 只</span>
+                </div>
+                <div className="tier-body">
+                  <span className="chips">
+                    {sent.ladder.newBoards.map(s => <LadderChip key={s.symbol} s={s} onPick={kline.openDetail} />)}
+                  </span>
+                </div>
+              </div>
+            )}
+            {!sent.ladder.tiers.length && !sent.ladder.newBoards.length && (
+              <div className="chart-empty">昨日无连板梯队，今日暂无新晋首板</div>
+            )}
+          </div>
+        ) : (
+          <div className="chart-empty">正在生成梯队…</div>
+        )}
+      </Card>
+
       {/* ---- 主线板块：行业为主、概念为辅 ---- */}
       <Card>
         <CardHead
@@ -333,6 +402,26 @@ export default function Market() {
           <div className="chart-empty">正在聚合板块数据…</div>
         )}
       </Card>
+
+      {/* 悬浮K线预览 + 选手详情弹窗（共享组件） */}
+      <KlinePopover state={kline.hover} />
+      <KlineDetailModal state={kline.detail} onClose={kline.closeDetail} onOpenBacktest={symbol => navigate(`/?symbol=${symbol}`)} />
     </div>
+  )
+}
+
+// LadderChip 梯队选手标签：名称 + 实时涨跌幅，点击弹K线。
+function LadderChip({ s, failed, onPick }: { s: LadderStock; failed?: boolean; onPick: (t: { symbol: string; name?: string }) => void }) {
+  return (
+    <button
+      className={`ladder-chip${failed ? ' failed' : ''}`}
+      title={`${s.symbol} · ${s.height === 1 ? '首板' : `${s.height} 板`} · 点击查看K线`}
+      onClick={() => onPick({ symbol: s.symbol, name: s.name })}
+    >
+      {s.name || s.symbol}
+      <span className={s.changePct >= 0 ? 'pos' : 'neg'}>
+        {s.changePct >= 0 ? '+' : ''}{s.changePct.toFixed(1)}%
+      </span>
+    </button>
   )
 }

@@ -37,6 +37,7 @@ type mvResult struct {
 	AsOf       string
 	Days       []market.SentimentDay
 	Streaks    map[string]int
+	StreaksPrev map[string]int
 	Industries []SectorRow
 	Concepts   []SectorRow
 	Mainline   string
@@ -211,7 +212,7 @@ func (mv *marketView) compute(profiles []store.Profile, cal []market.Candle) *mv
 	}
 
 	return &mvResult{
-		AsOf: base.AsOf, Days: base.Days, Streaks: base.StreakAtEnd,
+		AsOf: base.AsOf, Days: base.Days, Streaks: base.StreakAtEnd, StreaksPrev: base.StreakAtPrev,
 		Industries: industries, Concepts: concepts,
 		Mainline: mainline, MainlineStreak: streak,
 	}
@@ -295,11 +296,34 @@ func (mv *marketView) sentimentPayload(qc *quotes.Cache) map[string]any {
 		}
 	}
 	rt := market.ComputeSentimentRealtime(res.AsOf, qc.Updated().Format("15:04:05"), quotes, res.Streaks, pf, include, yesterdayLimit)
+
+	// 连板梯队：昨日梯队 + 快照晋级状态（全量选手，不折叠）。
+	_, includeDay := quoteDayOf(res.AsOf, time.Now())
+	streaks := res.Streaks
+	if includeDay {
+		streaks = res.StreaksPrev
+	}
+	ladder := market.BuildLadder(res.AsOf, qc.Updated().Format("15:04:05"), quotes, streaks, pf, includeDay)
+	names := make(map[string]string, len(profiles))
+	for _, p := range profiles {
+		names[p.Symbol] = p.Name
+	}
+	fillNames := func(list []market.LadderStock) {
+		for i := range list {
+			list[i].Name = names[list[i].Symbol]
+		}
+	}
+	for i := range ladder.Tiers {
+		fillNames(ladder.Tiers[i].Promoted)
+		fillNames(ladder.Tiers[i].Failed)
+	}
+	fillNames(ladder.NewBoards)
+
 	hist := res.Days
 	if len(hist) > 30 {
 		hist = hist[len(hist)-30:]
 	}
-	return map[string]any{"asOf": res.AsOf, "realtime": rt, "history": hist}
+	return map[string]any{"asOf": res.AsOf, "realtime": rt, "history": hist, "ladder": ladder}
 }
 
 // sectorsPayload 组装 /api/market/sectors 的响应：缓存的收盘口径 + 快照

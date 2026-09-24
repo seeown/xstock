@@ -138,10 +138,35 @@ export interface SentimentRealtime {
   promoteRate: number
 }
 
+// 连板梯队：昨日 N 板一档，全量列晋级/失败选手。
+export interface LadderStock {
+  symbol: string
+  name: string
+  height: number
+  changePct: number
+}
+
+export interface LadderTier {
+  height: number
+  total: number
+  promoted: LadderStock[]
+  failed: LadderStock[]
+  promoteRate: number
+}
+
+export interface Ladder {
+  asOf: string
+  updatedAt: string
+  final: boolean
+  tiers: LadderTier[]
+  newBoards: LadderStock[]
+}
+
 export interface SentimentResult {
   asOf: string
   realtime: SentimentRealtime
   history: SentimentDay[]
+  ladder?: Ladder
 }
 
 export interface SectorRow {

@@ -26,12 +26,14 @@ type SentimentDay struct {
 	PromoteRate    float64 `json:"promoteRate"`
 }
 
-// SentimentBase 全市场扫描结果：逐日情绪序列 + 截至序列末日的每票连板
-// 数（只存 ≥1 的，供实时口径叠加"昨日连板 + 今日封板 = 实时高度"）。
+// SentimentBase 全市场扫描结果：逐日情绪序列 + 截至序列末日/前一日的
+// 每票连板数（只存 ≥1 的；末日表供盘中口径，前一日表供收盘更新后的
+// 连板梯队——那时日线已含今日，"昨日梯队"要用倒数第二根）。
 type SentimentBase struct {
-	AsOf        string
-	Days        []SentimentDay
-	StreakAtEnd map[string]int
+	AsOf         string
+	Days         []SentimentDay
+	StreakAtEnd  map[string]int
+	StreakAtPrev map[string]int
 }
 
 // isLimitDown 判断 close 相对 prevClose 是否达到跌停（pct 为百分数）。
@@ -56,6 +58,7 @@ func SentimentHistory(days int, symbols []string, barsOf func(string) []Candle) 
 	}
 	agg := map[string]*dayAgg{}
 	streakAtEnd := map[string]int{}
+	out := SentimentBase{StreakAtEnd: streakAtEnd, StreakAtPrev: map[string]int{}}
 	for _, sym := range symbols {
 		bars := barsOf(sym)
 		if len(bars) < 2 {
@@ -66,6 +69,7 @@ func SentimentHistory(days int, symbols []string, barsOf func(string) []Candle) 
 			continue // 北交所等不支持
 		}
 		streak, prevUp := 0, false
+		prevStreak, savedPrev := 0, false
 		for i := 1; i < len(bars); i++ {
 			prev, cur := bars[i-1], bars[i]
 			pct := class.pct(cur.Date)
@@ -94,9 +98,15 @@ func SentimentHistory(days int, symbols []string, barsOf func(string) []Candle) 
 				d.limitDown++
 			}
 			prevUp = up
+			if i == len(bars)-2 {
+				prevStreak, savedPrev = streak, true
+			}
 		}
 		if streak > 0 {
 			streakAtEnd[sym] = streak
+		}
+		if savedPrev && prevStreak > 0 {
+			out.StreakAtPrev[sym] = prevStreak
 		}
 	}
 
@@ -108,7 +118,7 @@ func SentimentHistory(days int, symbols []string, barsOf func(string) []Candle) 
 	if len(dates) > days {
 		dates = dates[len(dates)-days:]
 	}
-	out := SentimentBase{Days: make([]SentimentDay, 0, len(dates)), StreakAtEnd: streakAtEnd}
+	out.Days = make([]SentimentDay, 0, len(dates))
 	if len(dates) > 0 {
 		out.AsOf = dates[len(dates)-1]
 	}

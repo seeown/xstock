@@ -437,6 +437,39 @@ td.num, th.num { text-align: right; }
 .spark-last { font-size: 14px; font-weight: 600; color: var(--ink); }
 .mainline-row td { background: rgba(245, 181, 68, 0.06); }
 .mainline-row td:first-child { font-weight: 600; }
+
+/* ---------- 连板梯队 ---------- */
+.ladder { display: flex; flex-direction: column; gap: 12px; }
+.ladder-tier {
+  padding: 10px 12px;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.ladder-tier.new-boards { border-style: dashed; }
+.tier-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+.tier-name { font-size: 13.5px; color: var(--ink); }
+.tier-head .muted { font-size: 12px; }
+.tier-rate { font-size: 13px; font-weight: 600; margin-left: auto; }
+.tier-body { display: flex; flex-direction: column; gap: 6px; }
+.tier-group { display: flex; align-items: flex-start; gap: 8px; }
+.tier-group em { font-style: normal; font-size: 11.5px; padding: 3px 7px; border-radius: 6px; margin-top: 2px; white-space: nowrap; }
+.tier-group em.ok { color: #ffb1c1; background: rgba(244, 87, 122, 0.12); }
+.tier-group em.fail { color: var(--muted); background: rgba(126, 152, 191, 0.10); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ladder-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+.ladder-chip:hover { border-color: var(--blue); }
+.ladder-chip span { font-size: 11px; }
+.ladder-chip.failed { opacity: 0.62; border-style: dashed; }
 .pager .muted { font-size: 12.5px; }
 .wash-star { color: #f5b544; }
 .param-field {
