@@ -394,6 +394,7 @@ func main() {
 			market.ScreenSetup
 			Name     string `json:"name"`
 			Industry string `json:"industry,omitempty"`
+			sortKey  string
 		}
 		items := make([]screenItem, 0, 64)
 		counts := map[string]int{"b1": 0, "b2": 0, "b3": 0}
@@ -410,11 +411,21 @@ func main() {
 			}
 			start := market.WindowStart(bars, days)
 			for _, setup := range market.FindNSetups(sym, bars, p) {
-				if start != "" && setup.KeyDate < start {
+				// B1 买点 = 回调阶段第一次止跌的K线（回调≥2天后的首根阳线）。
+				// 尚未止跌（刚首板/回调中无阳线）的票不进 B1 名单；
+				// 时间窗口与排序也按止跌触发日而非首板日。
+				key := setup.KeyDate
+				if setup.Stage == "b1" {
+					if !setup.B1Triggered {
+						continue
+					}
+					key = setup.B1TriggerDate
+				}
+				if start != "" && key < start {
 					continue
 				}
 				counts[setup.Stage]++
-				it := screenItem{ScreenSetup: setup}
+				it := screenItem{ScreenSetup: setup, sortKey: key}
 				if hasProf {
 					it.Name, it.Industry = prof.Name, prof.Industry
 				}
@@ -425,8 +436,8 @@ func main() {
 			}
 		}
 		sort.Slice(items, func(i, j int) bool {
-			if items[i].KeyDate != items[j].KeyDate {
-				return items[i].KeyDate > items[j].KeyDate
+			if items[i].sortKey != items[j].sortKey {
+				return items[i].sortKey > items[j].sortKey
 			}
 			return items[i].Symbol < items[j].Symbol
 		})
