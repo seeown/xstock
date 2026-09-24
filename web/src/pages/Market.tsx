@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { api, type Candle, type IndexInfo } from '../api'
+import { api, type Candle, type IndexInfo, type SentimentResult, type SectorsResult } from '../api'
 import KlineChart, { computeMA } from '../components/KlineChart'
-import { Banner, Card, CardHead, fmt, pct } from '../components/ui'
+import { Banner, Card, CardHead, Sparkline, fmt, pct } from '../components/ui'
 
 type RangeKey = '60' | '250' | '750' | 'all'
 
@@ -20,6 +20,20 @@ export default function Market() {
   const [loading, setLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [feedback, setFeedback] = useState<{ text: string; kind: 'info' | 'error' | 'success' }>({ text: '', kind: 'info' })
+  const [sent, setSent] = useState<SentimentResult | null>(null)
+  const [sectors, setSectors] = useState<SectorsResult | null>(null)
+
+  // 情绪 + 板块：首算可能要几秒（全市场扫描），之后每分钟随快照刷新。
+  useEffect(() => {
+    let cancelled = false
+    const load = () => {
+      api.marketSentiment().then(r => { if (!cancelled) setSent(r) }).catch(() => {})
+      api.marketSectors().then(r => { if (!cancelled) setSectors(r) }).catch(() => {})
+    }
+    load()
+    const t = setInterval(load, 60_000)
+    return () => { cancelled = true; clearInterval(t) }
+  }, [])
 
   const loadBars = useCallback(async (symbol: string): Promise<Candle[]> => {
     try {
@@ -167,6 +181,127 @@ export default function Market() {
           }
         />
         {loading ? <div className="chart-empty">正在加载K线…</div> : <KlineChart bars={bars} />}
+      </Card>
+
+      {/* ---- 市场情绪：实时口径 + 30 日趋势 ---- */}
+      <Card>
+        <CardHead
+          title="市场情绪"
+          sub={`涨停/跌停 · 炸板率 · 最高板 · 晋级率 · 快照 ${sent?.realtime.updatedAt || '—'}（每分钟自动刷新；历史口径不识别 ST，家数略偏保守）`}
+        />
+        {sent ? (
+          <>
+            <div className="metrics-row market-metrics">
+              <div className="metric">
+                <span className="metric-label">涨停</span>
+                <strong className="metric-value pos">{sent.realtime.limitUp}</strong>
+                <span className="metric-hint">盘中触板 {sent.realtime.touched}</span>
+              </div>
+              <div className="metric">
+                <span className="metric-label">跌停</span>
+                <strong className="metric-value neg">{sent.realtime.limitDown}</strong>
+              </div>
+              <div className="metric">
+                <span className="metric-label">炸板率</span>
+                <strong className="metric-value">{pct(sent.realtime.breakRate)}</strong>
+                <span className="metric-hint">触板未封 {sent.realtime.broke} 家</span>
+              </div>
+              <div className="metric">
+                <span className="metric-label">最高板</span>
+                <strong className="metric-value">{sent.realtime.maxBoards || '—'} 连板</strong>
+              </div>
+              <div className="metric">
+                <span className="metric-label">晋级率</span>
+                <strong className="metric-value">{pct(sent.realtime.promoteRate)}</strong>
+                <span className="metric-hint">昨日涨停 {sent.realtime.yesterdayLimit} → 今日仍封 {sent.realtime.promoted}</span>
+              </div>
+            </div>
+            <div className="spark-row">
+              {([
+                ['涨停家数（近30日）', sent.history.map(d => d.limitUp), '#f4577a'],
+                ['跌停家数（近30日）', sent.history.map(d => d.limitDown), '#22c58b'],
+                ['炸板率 %（近30日）', sent.history.map(d => d.breakRate), '#f5b544'],
+                ['最高板（近30日）', sent.history.map(d => d.maxBoards), '#9ec1ff'],
+              ] as Array<[string, number[], string]>).map(([label, values, color]) => (
+                <div key={label} className="spark-card">
+                  <span className="spark-label">{label}</span>
+                  <Sparkline values={values} color={color} width={150} height={40} />
+                  <span className="spark-last">{values.length ? String(values[values.length - 1]) : '—'}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="chart-empty">正在全市场扫描情绪数据（首算需要几秒）…</div>
+        )}
+      </Card>
+
+      {/* ---- 主线板块：行业为主、概念为辅 ---- */}
+      <Card>
+        <CardHead
+          title="主线板块"
+          sub={
+            sectors?.mainline
+              ? `当前主线：${sectors.mainline}（涨停家数连续 ${sectors.mainlineStreak} 日居首）· 主线熄火当天不做非主线的票`
+              : '暂无明显主线（无行业涨停家数居首）· 表中涨停/均涨为快照实时口径'
+          }
+        />
+        {sectors ? (
+          <>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>行业</th><th className="num">家数</th><th className="num">平均涨幅</th>
+                    <th className="num">涨停</th><th className="num">近5日涨停</th><th>等权指数(60日)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sectors.byIndustry.slice(0, 20).map(r => (
+                    <tr key={r.name} className={sectors.mainline === r.name ? 'mainline-row' : ''}>
+                      <td>
+                        {r.name}
+                        {sectors.mainline === r.name && <span className="concept-chip board-chip">主线{sectors.mainlineStreak}日</span>}
+                      </td>
+                      <td className="num">{r.count}</td>
+                      <td className={`num ${r.avgChange >= 0 ? 'pos' : 'neg'}`}>{r.avgChange >= 0 ? '+' : ''}{pct(r.avgChange)}</td>
+                      <td className="num">{r.limitUp || '—'}</td>
+                      <td className="num muted">{(r.limitUpRecent ?? []).join(' / ')}</td>
+                      <td><Sparkline values={r.index} width={130} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <details className="concept-cloud">
+              <summary>概念板块（成员有 400 上限截断，家数偏保守）</summary>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>概念</th><th className="num">家数</th><th className="num">平均涨幅</th>
+                      <th className="num">涨停</th><th className="num">近5日涨停</th><th>等权指数(60日)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(sectors.byConcept ?? []).slice(0, 15).map(r => (
+                      <tr key={r.name}>
+                        <td>{r.name}</td>
+                        <td className="num">{r.count}</td>
+                        <td className={`num ${r.avgChange >= 0 ? 'pos' : 'neg'}`}>{r.avgChange >= 0 ? '+' : ''}{pct(r.avgChange)}</td>
+                        <td className="num">{r.limitUp || '—'}</td>
+                        <td className="num muted">{(r.limitUpRecent ?? []).join(' / ')}</td>
+                        <td><Sparkline values={r.index} width={130} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          </>
+        ) : (
+          <div className="chart-empty">正在聚合板块数据…</div>
+        )}
       </Card>
     </div>
   )

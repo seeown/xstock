@@ -15,6 +15,7 @@ type Quote struct {
 	PreClose  float64 `json:"preClose"`
 	ChangePct float64 `json:"changePct"`
 	Amount    float64 `json:"amount"` // 当日成交额（元）
+	High      float64 `json:"high"`   // 当日最高价（含0=无数据）；炸板率等盘中判定用
 }
 
 // quoteBatchCap stays below the TDX protocol limit (~80 codes per request).
@@ -65,7 +66,7 @@ func (c *Client) FetchQuotes(symbols []string) ([]Quote, error) {
 		if !ok {
 			continue
 		}
-		q := Quote{Symbol: sym, Price: item.Close, PreClose: item.PreClose, Amount: item.Amount}
+		q := Quote{Symbol: sym, Price: item.Close, PreClose: item.PreClose, Amount: item.Amount, High: item.High}
 		// A zero close means no trade today (suspension); computing a change
 		// against the previous close would show a bogus -100%.
 		if q.Price > 0 && q.PreClose > 0 {

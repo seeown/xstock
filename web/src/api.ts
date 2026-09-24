@@ -111,6 +111,57 @@ export interface IndexInfo {
   lastDate?: string
 }
 
+// 市场情绪：一个交易日的收盘口径统计。
+export interface SentimentDay {
+  date: string
+  limitUp: number
+  limitDown: number
+  broke: number
+  breakRate: number
+  maxBoards: number
+  yesterdayLimit: number
+  promoted: number
+  promoteRate: number
+}
+
+export interface SentimentRealtime {
+  asOf: string
+  updatedAt: string
+  limitUp: number
+  limitDown: number
+  touched: number
+  broke: number
+  breakRate: number
+  maxBoards: number
+  yesterdayLimit: number
+  promoted: number
+  promoteRate: number
+}
+
+export interface SentimentResult {
+  asOf: string
+  realtime: SentimentRealtime
+  history: SentimentDay[]
+}
+
+export interface SectorRow {
+  name: string
+  count: number
+  avgChange: number
+  limitUp: number
+  lastDayLimit: number
+  limitUpRecent: number[]
+  index: number[]
+}
+
+export interface SectorsResult {
+  asOf: string
+  mainline: string
+  mainlineStreak: number
+  byIndustry: SectorRow[]
+  byConcept: SectorRow[]
+}
+
 export interface StockProfile {
   symbol: string
   name: string
@@ -254,6 +305,8 @@ export const api = {
     }),
   stocks: () => request<StockSummary[]>('/api/stocks'),
   marketIndices: () => request<IndexInfo[]>('/api/market/indices'),
+  marketSentiment: () => request<SentimentResult>('/api/market/sentiment'),
+  marketSectors: () => request<SectorsResult>('/api/market/sectors'),
   profile: (symbol: string) =>
     request<StockProfile>(`/api/stocks/${encodeURIComponent(symbol)}/profile`),
   syncProfile: (symbol: string) =>

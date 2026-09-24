@@ -78,6 +78,9 @@ func main() {
 		return syms
 	}, time.Minute)
 
+	// 全市场情绪 + 板块统计（全量日线扫描，按 asOf 缓存）。
+	mv := newMarketView(s)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"status": "ok"}) })
 	// strategy=n（通用 N 字，默认）或 zt（首板涨停→缩量回调→放量突破）。
@@ -284,6 +287,7 @@ func main() {
 			errorJSON(w, 500, err.Error())
 			return
 		}
+		mv.invalidate()
 		writeJSON(w, 200, map[string]any{"status": "reloaded"})
 	})
 	mux.HandleFunc("GET /api/sync-state", func(w http.ResponseWriter, r *http.Request) {
@@ -373,6 +377,16 @@ func main() {
 	// GET /api/screen?days=10 — 全市场 N 字战法筛查：跟踪每只票
 	// 首板→回调(B1)→突破(B2)→回踩(B3) 的存活形态，按各阶段关键日期
 	// 过滤出近 days 个交易日内出现的 setup。ST 与上市过新的票直接排除。
+	// GET /api/market/sentiment — 市场情绪：实时口径（快照）+ 近30日趋势。
+	mux.HandleFunc("GET /api/market/sentiment", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, mv.sentimentPayload(quoteCache))
+	})
+	// GET /api/market/sectors — 板块聚合：行业为主、概念为辅（概念成员
+	// 400 上限截断，家数偏保守），实时均涨/封板覆盖 + 主线识别。
+	mux.HandleFunc("GET /api/market/sectors", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, mv.sectorsPayload(quoteCache))
+	})
+
 	mux.HandleFunc("GET /api/screen", func(w http.ResponseWriter, r *http.Request) {
 		days := queryInt(r, "days", 10)
 		p := market.DefaultScreenParams()

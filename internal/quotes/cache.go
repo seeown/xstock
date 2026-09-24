@@ -15,6 +15,15 @@ import (
 // batch size matches tdx.Client.FetchQuotes cap.
 const batch = 60
 
+// maxFrames 保留的当日快照帧数（1 分钟一帧 ≈ 一个交易日的长度）。
+const maxFrames = 480
+
+// Frame 是某一时刻的全市场行情快照；当日滚动保留，跨日清零。
+type Frame struct {
+	At time.Time
+	Q  map[string]tdx.Quote
+}
+
 type Cache struct {
 	workers int
 	clients []*tdx.Client
@@ -22,6 +31,8 @@ type Cache struct {
 	mu      sync.RWMutex
 	by      map[string]tdx.Quote
 	updated time.Time
+	frames  []Frame
+	day     string
 }
 
 func New(workers int) *Cache {
@@ -94,9 +105,18 @@ func (c *Cache) refresh(symbols []string) {
 	close(jobs)
 	wg.Wait()
 
+	now := time.Now()
 	c.mu.Lock()
 	c.by = merged
-	c.updated = time.Now()
+	c.updated = now
+	// 当日滚动帧：涨速榜、盘中触板等需要「N 分钟前」的数据。
+	if day := now.Format("2006-01-02"); day != c.day {
+		c.day, c.frames = day, nil
+	}
+	c.frames = append(c.frames, Frame{At: now, Q: merged})
+	if len(c.frames) > maxFrames {
+		c.frames = c.frames[len(c.frames)-maxFrames:]
+	}
 	c.mu.Unlock()
 	log.Printf("行情缓存已刷新：%d 只，用时 %s", len(merged), time.Since(start).Round(time.Millisecond))
 }
@@ -123,5 +143,14 @@ func (c *Cache) Snapshot() map[string]tdx.Quote {
 	for k, v := range c.by {
 		out[k] = v
 	}
+	return out
+}
+
+// Frames 返回当日滚动快照序列的浅拷贝（帧内 map 不再变更，可安全读）。
+func (c *Cache) Frames() []Frame {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	out := make([]Frame, len(c.frames))
+	copy(out, c.frames)
 	return out
 }
