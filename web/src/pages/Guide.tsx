@@ -101,16 +101,13 @@ export default function Guide() {
         </div>
       </header>
 
-      <div className="guide-verdict">
-        <div className={`gv-score ${stageTone[rt.stage] ?? ''}`}>
-          <span className="gv-num">{rt.tempScore.toFixed(0)}</span>
-          <span className="gv-meta">
-            <span className="gv-stage">{rt.stage}</span>
-            <span className="gv-quadrant">{rt.quadrant}</span>
-          </span>
+      <div className="guide-tiles">
+        <div className="gt-tile">
+          <span>温度分 · {rt.quadrant}</span>
+          <b className={stageTone[rt.stage] ?? ''}>{rt.tempScore.toFixed(0)}<i className="gt-stage">{rt.stage}</i></b>
+          <em>冰点&lt;20 · 中性40~60 · 亢奋≥80</em>
         </div>
-        <div className="guide-tiles">
-          {([
+        {([
             ['涨停家数', String(rt.limitUp), `炸板 ${rt.broke}`],
             ['跌停家数', String(rt.limitDown), ''],
             ['炸板率', pct(rt.breakRate), ''],
@@ -126,7 +123,6 @@ export default function Guide() {
               {hint && <em>{hint}</em>}
             </div>
           ))}
-        </div>
       </div>
 
       <Card>
