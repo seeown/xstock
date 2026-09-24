@@ -389,9 +389,19 @@ func main() {
 
 	mux.HandleFunc("GET /api/screen", func(w http.ResponseWriter, r *http.Request) {
 		days := queryInt(r, "days", 10)
-		p := market.DefaultScreenParams()
+		p := market.DefaultNPParams()
+		// 恐慌日集合：从上证指数日线计算（单日跌幅 ≥1.5%）。
+		panicDays := map[string]bool{}
+		if idx := s.Bars("000001.SH"); len(idx) > 1 {
+			for i := 1; i < len(idx); i++ {
+				if prev := idx[i-1].Close; prev > 0 && (idx[i].Close/prev-1)*100 <= -1.5 {
+					panicDays[idx[i].Date] = true
+				}
+			}
+		}
+		isPanic := func(date string) bool { return panicDays[date] }
 		type screenItem struct {
-			market.ScreenSetup
+			market.NPSetup
 			Name     string `json:"name"`
 			Industry string `json:"industry,omitempty"`
 			sortKey  string
@@ -409,23 +419,21 @@ func main() {
 			if hasProf && strings.Contains(strings.ToUpper(prof.Name), "ST") {
 				continue // ST 5% 限额无法按日线识别，整体排除
 			}
+			if strings.HasSuffix(sym, ".BJ") {
+				continue // 北交所：流动性口径外，排除
+			}
 			start := market.WindowStart(bars, days)
-			for _, setup := range market.FindNSetups(sym, bars, p) {
-				// B1 买点 = 回调阶段第一次止跌的K线（回调≥2天后的首根阳线）。
-				// 尚未止跌（刚首板/回调中无阳线）的票不进 B1 名单；
-				// 时间窗口与排序也按止跌触发日而非首板日。
+			for _, setup := range market.FindNPatterns(sym, bars, p, isPanic) {
+				// b1 形态在状态机里已保证企稳触发（KeyDate 即触发日）。
 				key := setup.KeyDate
 				if setup.Stage == "b1" {
-					if !setup.B1Triggered {
-						continue
-					}
 					key = setup.B1TriggerDate
 				}
 				if start != "" && key < start {
 					continue
 				}
 				counts[setup.Stage]++
-				it := screenItem{ScreenSetup: setup, sortKey: key}
+				it := screenItem{NPSetup: setup, sortKey: key}
 				if hasProf {
 					it.Name, it.Industry = prof.Name, prof.Industry
 				}

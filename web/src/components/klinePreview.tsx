@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Candle, ScreenSetup } from '../api'
+import type { Candle, NPSetup } from '../api'
 import { api } from '../api'
 import MiniKline, { setupWindow } from './MiniKline'
 import { CardHead, Spinner, fmt, pct } from './ui'
@@ -24,7 +24,7 @@ export interface KlineTarget {
   /** 形态 key（同一票多形态时区分悬浮目标），无形态留空 */
   key?: string
   /** 命中筛查形态时带上，预览/弹窗画出形态标注 */
-  setup?: ScreenSetup
+  setup?: NPSetup
   /** 无形态时弹窗副标题（如板块·行业） */
   sub?: string
 }
@@ -97,7 +97,7 @@ export function KlinePopover({ state }: { state: KlineHoverState | null }) {
     >
       <div className="kline-pop-head">
         <b>{state.symbol}</b> {state.name} · {state.setup
-          ? `首板 ${state.setup.boardDate} · ${state.setup.limitPct}%板 · ${stageLabel[state.setup.stage]}`
+          ? `A段 ${state.setup.aStartDate.slice(5)}~${state.setup.aEndDate.slice(5)} +${state.setup.aRisePct.toFixed(0)}%${state.setup.hasLimitUp ? ' 涨停基因' : ''} · ${stageLabel[state.setup.stage]}`
           : '日K概览'}
       </div>
       {state.bars && state.bars.length
@@ -107,41 +107,42 @@ export function KlinePopover({ state }: { state: KlineHoverState | null }) {
   )
 }
 
-// setupFacts 形态数值卡（筛查场景）。
-export function setupFacts(s: ScreenSetup): Array<[string, string]> {
+// setupFacts 形态数值卡（筛查场景，手册口径三价格齐全）。
+export function setupFacts(s: NPSetup): Array<[string, string]> {
   const facts: Array<[string, string]> = [
-    ['首板日', s.boardDate],
-    ['板日量比', `${fmt(s.boardVolRatio)}×`],
-    ['涨停价(支撑)', fmt(s.boardClose)],
-    ['前高(触发)', fmt(s.swingHigh)],
-    ['起涨点', fmt(s.riseStart)],
-    ['MA20(板日)', fmt(s.ma20)],
+    ['A段', `${s.aStartDate.slice(5)}~${s.aEndDate.slice(5)}`],
+    ['A段涨幅', `+${s.aRisePct.toFixed(1)}%`],
+    ['A段量能', `${fmt(s.aVolRatio)}×5日均量`],
+    ['涨停基因', s.hasLimitUp ? '有' : '无'],
+    ['颈线', fmt(s.neckline)],
+    ['黄金低吸区', `${fmt(s.retr50)}~${fmt(s.retr382)}`],
+    ['止损(B段低点)', fmt(s.stopLoss)],
+    ['目标(C≈A)', fmt(s.target)],
+    ['MA20', fmt(s.ma20)],
   ]
   if (s.stage === 'b1') {
     facts.push(
-      ['回调天数', `${s.pullbackDays}天`],
-      ['回撤', pct(s.pullbackDepth * 100)],
-      ['回调量比', `${fmt(s.pullbackVolRatio)}×板日`],
-      ['低吸区', `${fmt(s.b1ZoneLow)}~${fmt(s.b1ZoneHigh)}`],
-      ['企稳', s.b1Triggered ? `★ ${s.b1TriggerDate}` : '待触发'],
-      ['止损', fmt(s.stopLossB1)],
+      ['回调天数', `${s.bDays}天`],
+      ['回撤深度', pct(s.retrRatio * 100)],
+      ['回调量比', `${fmt(s.bVolRatio)}×A段均量`],
+      ['企稳信号', s.b1Triggered ? `★ ${s.b1TriggerDate}（${s.b1Signal}）` : '待触发'],
     )
   } else {
     facts.push(
       ['突破日', s.breakoutDate ?? '—'],
       ['突破价', fmt(s.breakoutPrice)],
-      ['突破量比', `${fmt(s.breakoutVolRatio)}×`],
+      ['突破量能', `${fmt(s.breakoutVolRatio)}×B段均量`],
       ['突破后天数', `${s.daysSinceBreakout}天`],
-      ['止损', fmt(s.stage === 'b2' ? s.stopLossB2 : s.stopLossB3)],
     )
     if (s.stage === 'b3') {
       facts.push(
-        ['回踩天数', `${s.retestDays}天`],
+        ['回踩日', s.retestDate ?? '—'],
         ['回踩低点', s.retestLow > 0 ? fmt(s.retestLow) : '—'],
-        ['企稳', s.retestTriggered ? `★ ${s.retestTriggerDate}` : '待触发'],
+        ['缩量确认', s.retestConfirm ? '★' : '量能偏大'],
       )
     }
   }
+  if (s.chaseBan) facts.push(['追高禁令', '已过追高线，放弃追入'])
   return facts
 }
 
@@ -178,7 +179,7 @@ export function KlineDetailModal({ state, onClose, onOpenBacktest }: {
       <div className="modal-card card" onClick={e => e.stopPropagation()}>
         <CardHead
           title={`${state.symbol} ${state.name ?? ''}${s ? ` · ${stageLabel[s.stage]}` : ''}`}
-          sub={s ? `${s.limitPct}% 板 · 数据截至 ${s.asOf}` : (state.sub ?? '日K概览')}
+          sub={s ? `A段 +${s.aRisePct.toFixed(1)}%${s.hasLimitUp ? ' · 含涨停' : ''} · 数据截至 ${s.asOf}` : (state.sub ?? '日K概览')}
           right={
             <span className="focus-nav">
               <button className="btn ghost small" onClick={() => onOpenBacktest(state.symbol)}>到回测页深看</button>

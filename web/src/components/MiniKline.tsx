@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { init, dispose, registerOverlay } from 'klinecharts'
 import type { KLineData } from 'klinecharts'
-import type { Candle, ScreenSetup } from '../api'
+import type { Candle, NPSetup } from '../api'
 
 // 筛查页的形态预览图：只读 K 线（悬浮浮窗 / 详情弹窗共用），把一个
 // setup 的完整结构画出来——价位线（涨停价/前高/止损）、低吸区色带、
@@ -143,11 +143,11 @@ function ensureZtMark() {
   })
 }
 
-// setupWindow 截取形态窗口：首板日前 45 根到序列末尾，最多 150 根；
+// setupWindow 截取形态窗口：A 段末前 45 根到序列末尾，最多 150 根；
 // 无形态（个股页纯预览）时取最近 120 根。
-export function setupWindow(bars: Candle[], setup?: ScreenSetup): Candle[] {
+export function setupWindow(bars: Candle[], setup?: NPSetup): Candle[] {
   if (!bars.length) return bars
-  const idx = setup ? bars.findIndex(b => b.date === setup.boardDate) : -1
+  const idx = setup ? bars.findIndex(b => b.date === setup.aEndDate) : -1
   let start = idx >= 0 ? idx - 45 : bars.length - 120
   if (bars.length - start > 150) start = bars.length - 150
   return bars.slice(Math.max(0, start))
@@ -157,7 +157,7 @@ export default function MiniKline({
   bars, setup, height = 280,
 }: {
   bars: Candle[]
-  setup?: ScreenSetup
+  setup?: NPSetup
   height?: number
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
@@ -212,24 +212,23 @@ export default function MiniKline({
           extendData: { color },
         })
       }
-      // 低吸区色带（沿窗口首尾）
-      if (setup.b1ZoneLow > 0 && setup.b1ZoneHigh > setup.b1ZoneLow) {
+      // 黄金低吸区色带：A 段涨幅回撤 0.382~0.5（retr382 上沿、retr50 下沿）
+      if (setup.retr50 > 0 && setup.retr382 > setup.retr50) {
         chart.createOverlay({
           name: 'ztband',
           points: [
-            { timestamp: firstTs, value: setup.b1ZoneHigh },
-            { timestamp: lastTs, value: setup.b1ZoneLow },
+            { timestamp: firstTs, value: setup.retr382 },
+            { timestamp: lastTs, value: setup.retr50 },
           ],
         })
       }
-      const stop = setup.stage === 'b1' ? setup.stopLossB1 : setup.stage === 'b2' ? setup.stopLossB2 : setup.stopLossB3
-      priceLine(setup.boardClose, GOLD)
-      priceLine(stop, '#aab6cc')
-      // 价位图例：右上角竖排（前高只留文字不画线，遵循只留文字的要求）。
+      priceLine(setup.neckline, GOLD)   // 颈线 = A 段最高
+      priceLine(setup.stopLoss, '#aab6cc') // 铁律止损 = B 段最低
+      // 价位图例：右上角竖排（目标 C≈A 只留文字）。
       const legend = [
-        { price: setup.swingHigh, text: `前高 ${setup.swingHigh.toFixed(2)}`, color: '#cdd9ec' },
-        { price: setup.boardClose, text: `涨停价 ${setup.boardClose.toFixed(2)}`, color: GOLD },
-        { price: stop, text: `止损 ${stop.toFixed(2)}`, color: '#aab6cc' },
+        { price: setup.target, text: `目标 ${setup.target.toFixed(2)}`, color: '#7ce3bb' },
+        { price: setup.neckline, text: `颈线 ${setup.neckline.toFixed(2)}`, color: GOLD },
+        { price: setup.stopLoss, text: `止损 ${setup.stopLoss.toFixed(2)}`, color: '#aab6cc' },
       ].filter(e => e.price > 0).sort((a, b) => b.price - a.price)
       ensureZtLegend()
       chart.createOverlay({
@@ -251,10 +250,10 @@ export default function MiniKline({
         if (kind === 'board') points.push({ timestamp: ts, value: bar.high })
         chart.createOverlay({ name: 'ztmark', points, extendData: { kind, color, label } })
       }
-      mark(setup.boardDate, 'board', ORANGE)
+      mark(setup.aEndDate, 'board', ORANGE, 'A') // A 段末（颈线所在根）
       if (setup.breakoutDate) mark(setup.breakoutDate, 'breakout', GOLD)
       if (setup.b1Triggered && setup.b1TriggerDate) mark(setup.b1TriggerDate, 'star', ORANGE)
-      if (setup.retestTriggered && setup.retestTriggerDate) mark(setup.retestTriggerDate, 'star', GOLD)
+      if (setup.retestDate) mark(setup.retestDate, 'star', GOLD)
     }
 
     // 适配窗口宽度：整段窗口撑满画布，右端对齐最新K线。

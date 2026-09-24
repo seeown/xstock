@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, type Quote, type ScreenResult, type ScreenSetup } from '../api'
+import { api, type Quote, type ScreenResult, type NPSetup } from '../api'
 import { KlineDetailModal, KlinePopover, useKlinePreview } from '../components/klinePreview'
 import { Banner, Card, CardHead, Empty, Spinner, fmt, pct } from '../components/ui'
 
@@ -10,13 +10,13 @@ const PAGE_SIZE = 50
 type Stage = 'b1' | 'b2' | 'b3'
 
 const stageTabs: Array<{ key: Stage; label: string; sub: string }> = [
-  { key: 'b1', label: '回调低吸 B1', sub: '首板后缩量回调≥2天、已出现第一次止跌K线（★=回调后首根阳线）的票——未止跌的不进名单；不破起涨点、收盘≥MA20、逐日缩量、回撤未过半分位' },
-  { key: 'b2', label: '放量突破 B2', sub: '收盘突破首板前高、量比 1.5~3、收盘 > MA20；止损=前高下方' },
-  { key: 'b3', label: '回踩企稳 B3', sub: '突破后回踩、收盘不破首板涨停价；★=回踩后首根阳线；止损=涨停价下方' },
+  { key: 'b1', label: '回调低吸 B1', sub: '买点①：B段回撤进入 A段涨幅 0.382~0.5 黄金区 且出现企稳信号（★ 长下影/阳包阴/地量后放量阳/20日线首阳）——未止跌不进名单；止损=B段最低点' },
+  { key: 'b2', label: '放量突破 B2', sub: '买点②：B段≥3日后收盘 ≥ 颈线×1.01、量 ≥ B段均量×2、非大盘恐慌日；无量突破/擦线不算；止损=B段最低点，目标 C≈A' },
+  { key: 'b3', label: '回踩确认 B3', sub: '突破后 3 日内回踩颈线不破（low ≤ 颈线×1.02、收盘 ≥ 颈线）；★=回踩缩量确认；跌回颈线下方=假突破出局' },
 ]
 
 // B2 视角包含已进入回踩(b3)的票——突破事件仍在窗口内，B2 战术同适用。
-function inTab(item: ScreenSetup, tab: Stage): boolean {
+function inTab(item: NPSetup, tab: Stage): boolean {
   if (tab === 'b1') return item.stage === 'b1'
   if (tab === 'b2') return item.stage === 'b2' || item.stage === 'b3'
   return item.stage === 'b3'
@@ -77,7 +77,7 @@ export default function Screen() {
   // 行级 K 线预览与详情弹窗（悬浮预览 / 点击弹大图，逻辑在 klinePreview）
   const kline = useKlinePreview()
 
-  const rowProps = (s: ScreenSetup) => ({
+  const rowProps = (s: NPSetup) => ({
     className: 'row-clickable',
     title: '悬浮预览K线 · 点击查看形态详情',
     onClick: () => kline.openDetail({ symbol: s.symbol, name: s.name, key: s.keyDate, setup: s }),
@@ -91,7 +91,7 @@ export default function Screen() {
     return all.filter(i => inTab(i, key)).length
   }
 
-  const quoteCell = (s: ScreenSetup) => {
+  const quoteCell = (s: NPSetup) => {
     const q = quotes[s.symbol]
     if (!q) return <td className="num muted">—</td>
     return (
@@ -103,10 +103,6 @@ export default function Screen() {
       </>
     )
   }
-
-  const star = (on: boolean, date?: string) =>
-    on ? <span className="wash-star" title={date}>★{date ? ` ${date.slice(5)}` : ''}</span>
-       : <span className="muted">待触发</span>
 
   const meta = stageTabs.find(t => t.key === tab)!
   const activeSub = meta.sub
@@ -171,28 +167,29 @@ export default function Screen() {
                 <table>
                   <thead>
                     <tr>
-                      <th>代码 / 名称</th><th>首板日</th><th className="num">板日量比</th>
-                      <th className="num">涨停价</th><th className="num">前高</th>
+                      <th>代码 / 名称</th><th>A段</th><th className="num">A涨幅</th><th className="num">A量能</th>
+                      <th className="num">颈线</th><th className="num">低吸区(0.382~0.5)</th>
                       <th className="num">回调</th><th className="num">回撤</th><th className="num">回调量比</th>
-                      <th className="num">低吸区</th><th className="num">MA20</th><th>企稳</th>
-                      <th className="num">止损</th><th className="num">现价</th><th className="num">当日</th>
+                      <th>企稳信号</th><th className="num">止损(B低)</th><th className="num">目标</th><th>追高</th>
+                      <th className="num">现价</th><th className="num">当日</th>
                     </tr>
                   </thead>
                   <tbody>
                     {pageItems.map(s => (
                       <tr key={s.symbol + s.keyDate} {...rowProps(s)}>
                         <td><b>{s.symbol}</b>{s.name ? ` ${s.name}` : ''}</td>
-                        <td>{s.boardDate}</td>
-                        <td className="num">{fmt(s.boardVolRatio)}×</td>
-                        <td className="num">{fmt(s.boardClose)}</td>
-                        <td className="num">{fmt(s.swingHigh)}</td>
-                        <td className="num">{s.pullbackDays}天</td>
-                        <td className="num">{pct(s.pullbackDepth * 100)}</td>
-                        <td className="num">{fmt(s.pullbackVolRatio)}×板</td>
-                        <td className="num">{fmt(s.b1ZoneLow)}~{fmt(s.b1ZoneHigh)}</td>
-                        <td className="num">{fmt(s.currentMa20)}</td>
-                        <td>{star(s.b1Triggered, s.b1TriggerDate)}</td>
-                        <td className="num">{fmt(s.stopLossB1)}</td>
+                        <td>{s.aStartDate.slice(5)}~{s.aEndDate.slice(5)}{s.hasLimitUp && <span className="wash-star" title="A段含涨停（涨停基因）"> 板</span>}</td>
+                        <td className="num pos">+{s.aRisePct.toFixed(1)}%</td>
+                        <td className="num">{fmt(s.aVolRatio)}×</td>
+                        <td className="num">{fmt(s.neckline)}</td>
+                        <td className="num">{fmt(s.retr50)}~{fmt(s.retr382)}</td>
+                        <td className="num">{s.bDays}天</td>
+                        <td className="num">{pct(s.retrRatio * 100)}</td>
+                        <td className="num">{fmt(s.bVolRatio)}×A</td>
+                        <td>{s.b1Triggered ? <span className="wash-star" title={s.b1TriggerDate}>★{s.b1Signal}</span> : '待触发'}</td>
+                        <td className="num">{fmt(s.stopLoss)}</td>
+                        <td className="num">{fmt(s.target)}</td>
+                        <td>{s.chaseBan ? <span className="neg">过线</span> : '—'}</td>
                         {quoteCell(s)}
                       </tr>
                     ))}
@@ -203,9 +200,10 @@ export default function Screen() {
                 <table>
                   <thead>
                     <tr>
-                      <th>代码 / 名称</th><th>首板日</th><th className="num">涨停价</th>
-                      <th>突破日</th><th className="num">突破价</th><th className="num">突破量比</th>
-                      <th className="num">突破后</th><th>回踩状态</th><th className="num">止损</th>
+                      <th>代码 / 名称</th><th>A段涨幅</th>
+                      <th>突破日</th><th className="num">突破价</th><th className="num">突破量能</th>
+                      <th className="num">颈线</th><th className="num">突破后</th><th>回踩状态</th>
+                      <th className="num">止损(B低)</th><th className="num">目标</th><th>追高</th>
                       <th className="num">现价</th><th className="num">当日</th>
                     </tr>
                   </thead>
@@ -213,18 +211,20 @@ export default function Screen() {
                     {pageItems.map(s => (
                       <tr key={s.symbol + s.keyDate} {...rowProps(s)}>
                         <td><b>{s.symbol}</b>{s.name ? ` ${s.name}` : ''}</td>
-                        <td>{s.boardDate}</td>
-                        <td className="num">{fmt(s.boardClose)}</td>
+                        <td className="num pos">+{s.aRisePct.toFixed(1)}%</td>
                         <td>{s.breakoutDate}</td>
                         <td className="num">{fmt(s.breakoutPrice)}</td>
                         <td className="num">{fmt(s.breakoutVolRatio)}×</td>
+                        <td className="num">{fmt(s.neckline)}</td>
                         <td className="num">{s.daysSinceBreakout}天</td>
                         <td>
-                          {s.stage === 'b2' ? '未回踩' : s.retestTriggered
-                            ? <span className="wash-star" title={s.retestTriggerDate}>★已企稳{s.retestTriggerDate ? ` ${s.retestTriggerDate.slice(5)}` : ''}</span>
+                          {s.stage === 'b2' ? '未回踩' : s.retestConfirm
+                            ? <span className="wash-star" title={s.retestDate}>★缩量确认</span>
                             : '回踩中'}
                         </td>
-                        <td className="num">{fmt(s.stopLossB2)}</td>
+                        <td className="num">{fmt(s.stopLoss)}</td>
+                        <td className="num">{fmt(s.target)}</td>
+                        <td>{s.chaseBan ? <span className="neg">过线</span> : '—'}</td>
                         {quoteCell(s)}
                       </tr>
                     ))}
@@ -236,9 +236,9 @@ export default function Screen() {
                   <thead>
                     <tr>
                       <th>代码 / 名称</th><th>突破日</th><th className="num">突破价</th>
-                      <th>首板日</th><th className="num">涨停价(支撑)</th>
-                      <th className="num">回踩</th><th className="num">回踩低点</th><th>企稳</th>
-                      <th className="num">止损</th><th className="num">现价</th><th className="num">当日</th>
+                      <th>回踩日</th><th className="num">回踩低点</th><th>缩量确认</th>
+                      <th className="num">颈线</th><th className="num">止损(B低)</th><th className="num">目标</th>
+                      <th className="num">现价</th><th className="num">当日</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -247,12 +247,12 @@ export default function Screen() {
                         <td><b>{s.symbol}</b>{s.name ? ` ${s.name}` : ''}</td>
                         <td>{s.breakoutDate}</td>
                         <td className="num">{fmt(s.breakoutPrice)}</td>
-                        <td>{s.boardDate}</td>
-                        <td className="num">{fmt(s.boardClose)}</td>
-                        <td className="num">{s.retestDays}天</td>
+                        <td>{s.retestDate ?? '—'}</td>
                         <td className="num">{s.retestLow > 0 ? fmt(s.retestLow) : '—'}</td>
-                        <td>{star(s.retestTriggered, s.retestTriggerDate)}</td>
-                        <td className="num">{fmt(s.stopLossB3)}</td>
+                        <td>{s.retestConfirm ? <span className="wash-star" title={s.retestDate}>★</span> : '量偏大'}</td>
+                        <td className="num">{fmt(s.neckline)}</td>
+                        <td className="num">{fmt(s.stopLoss)}</td>
+                        <td className="num">{fmt(s.target)}</td>
                         {quoteCell(s)}
                       </tr>
                     ))}

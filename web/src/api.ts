@@ -230,42 +230,40 @@ export interface Quote {
   amount: number
 }
 
-// 全市场 N 字筛查：一个存活 setup 的当前快照（阶段 b1/b2/b3）。
-export interface ScreenSetup {
+// 全市场 N 字筛查（手册口径）：一个存活形态的当前快照。
+export interface NPSetup {
   symbol: string
   stage: 'b1' | 'b2' | 'b3'
   keyDate: string
   asOf: string
-  limitPct: number
-  boardDate: string
-  boardClose: number
-  boardHigh: number
-  swingHigh: number
-  riseStart: number
-  boardVolRatio: number
-  boardVolume: number
+  aStartDate: string
+  aEndDate: string
+  aRisePct: number
+  aVolRatio: number
+  hasLimitUp: boolean
+  neckline: number
+  aStart: number
+  bDays: number
+  retrRatio: number
+  bLow: number
+  bVolRatio: number
+  retr382: number
+  retr50: number
   ma20: number
-  currentMa20: number
   currentClose: number
-  pullbackDays: number
-  pullbackLow: number
-  pullbackDepth: number
-  pullbackVolRatio: number
-  b1ZoneLow: number
-  b1ZoneHigh: number
   b1Triggered: boolean
   b1TriggerDate?: string
-  stopLossB1: number
+  b1Signal?: string
   breakoutDate?: string
   breakoutPrice: number
   breakoutVolRatio: number
   daysSinceBreakout: number
-  stopLossB2: number
-  retestDays: number
+  retestDate?: string
   retestLow: number
-  retestTriggered: boolean
-  retestTriggerDate?: string
-  stopLossB3: number
+  retestConfirm: boolean
+  stopLoss: number
+  target: number
+  chaseBan: boolean
   name?: string
   industry?: string
 }
@@ -274,7 +272,7 @@ export interface ScreenResult {
   asOf: string
   windowDays: number
   counts: { b1: number; b2: number; b3: number }
-  items: ScreenSetup[]
+  items: NPSetup[]
 }
 
 export interface SyncState {
