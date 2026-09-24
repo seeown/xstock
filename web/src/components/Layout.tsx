@@ -32,6 +32,13 @@ const icons = {
       <path d="M3 5h18l-7 8v5.5L10 21v-8L3 5z" />
     </svg>
   ),
+  guide: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 21a9 9 0 1 0-9-9" />
+      <path d="M3 12H4M12 4v1M18.4 6.6l-.7.7M20 12h-1M12 20v-6" />
+      <path d="M12 14a2.5 2.5 0 1 0-2.5-2.5" />
+    </svg>
+  ),
   strategy: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
@@ -44,6 +51,7 @@ const navItems = [
   { to: '/', label: '回测分析', icon: icons.dashboard, end: true },
   { to: '/screen', label: '股票筛查', icon: icons.screen },
   { to: '/market', label: '大盘行情', icon: icons.market },
+  { to: '/guide', label: '情绪指南', icon: icons.guide },
   { to: '/stocks', label: '个股行情', icon: icons.stocks },
   { to: '/data', label: '数据管理', icon: icons.data },
   { to: '/strategy', label: '策略说明', icon: icons.strategy },

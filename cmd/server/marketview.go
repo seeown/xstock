@@ -7,6 +7,7 @@ package main
 
 import (
 	"log"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -43,6 +44,13 @@ type mvResult struct {
 	Mainline   string
 	// MainlineStreak 主线板块连续霸榜（涨停家数第一）的天数。
 	MainlineStreak int
+	// 量能与广度：近60个交易日（与 sectorWindow 对齐）的全市场成交额
+	// 估算（成交量×收盘价，亿元）、涨/跌家数、等权平均涨幅(%)。
+	Dates     []string  `json:"dates"`
+	Amounts   []float64 `json:"amounts"`
+	UpCounts  []int     `json:"upCounts"`
+	DownCounts []int    `json:"downCounts"`
+	AvgRets   []float64 `json:"avgRets"`
 }
 
 type marketView struct {
@@ -95,12 +103,17 @@ func (mv *marketView) compute(profiles []store.Profile, cal []market.Candle) *mv
 		return mv.st.Bars(sym)
 	})
 
-	// 交易日轴 + 每日涨停的板块累加器。
+	// 交易日轴 + 每日涨停的板块累加器 + 全市场量能/广度累加器。
 	days := cal[len(cal)-sectorWindow:]
 	dayIdx := make(map[string]int, len(days))
 	for i, d := range days {
 		dayIdx[d.Date] = i
 	}
+	gAmt := make([]float64, len(days))  // 成交额估算（亿元/日）
+	gUp := make([]int, len(days))       // 上涨家数
+	gDown := make([]int, len(days))     // 下跌家数
+	gRetSum := make([]float64, len(days))
+	gRetCnt := make([]int, len(days))
 	type secAgg struct {
 		name     string
 		count    int
@@ -149,6 +162,15 @@ func (mv *marketView) compute(profiles []store.Profile, cal []market.Candle) *mv
 				ret = cur.Close/prev.Close - 1
 			}
 			sealed := market.IsDailyLimitUp(prev.Close, cur.Close, market.LimitUpPct(p.Symbol, cur.Date))
+			// 全市场量能与广度（与板块同一次遍历内累积）
+			gAmt[di] += cur.Volume * cur.Close / 1e8
+			if ret > 0 {
+				gUp[di]++
+			} else if ret < 0 {
+				gDown[di]++
+			}
+			gRetSum[di] += ret
+			gRetCnt[di]++
 			for _, a := range aggs {
 				a.retSum[di] += ret
 				a.retCnt[di]++
@@ -211,11 +233,207 @@ func (mv *marketView) compute(profiles []store.Profile, cal []market.Candle) *mv
 		}
 	}
 
+	dayDates := make([]string, len(days))
+	avgRets := make([]float64, len(days))
+	for i, d := range days {
+		dayDates[i] = d.Date
+		if gRetCnt[i] > 0 {
+			avgRets[i] = gRetSum[i] / float64(gRetCnt[i]) * 100
+		}
+	}
 	return &mvResult{
 		AsOf: base.AsOf, Days: base.Days, Streaks: base.StreakAtEnd, StreaksPrev: base.StreakAtPrev,
 		Industries: industries, Concepts: concepts,
 		Mainline: mainline, MainlineStreak: streak,
+		Dates: dayDates, Amounts: gAmt, UpCounts: gUp, DownCounts: gDown, AvgRets: avgRets,
 	}
+}
+
+// tempScore 情绪温度分（0~100）：涨停家数 30 + 炸板率反向 20 + 晋级率 20
+// + 量能 15 + 高度 15。量能入参为当日成交额/前5日均值的比值。
+func tempScore(limitUp int, breakRate, promoteRate float64, amountRatio, maxBoards float64) float64 {
+	score := 0.0
+	score += clamp01(float64(limitUp)/120) * 30
+	score += clamp01((55-breakRate)/35) * 20 // 炸板率≤20% 满，≥55% 零
+	score += clamp01((promoteRate-12)/28) * 20
+	score += clamp01((amountRatio-0.72)/0.43) * 15 // 0.72×缩量 → 1.15×放量
+	score += clamp01((maxBoards-2)/5) * 15         // 2板 → 7板
+	return math.Round(score*10) / 10
+}
+
+func clamp01(v float64) float64 { return math.Max(0, math.Min(1, v)) }
+
+// tempStage 温度分对应的情绪阶段。
+func tempStage(score float64) string {
+	switch {
+	case score < 20:
+		return "冰点"
+	case score < 40:
+		return "低迷"
+	case score < 60:
+		return "中性"
+	case score < 80:
+		return "活跃"
+	default:
+		return "亢奋"
+	}
+}
+
+// quadrant 量价四象限：等权平均涨跌 × 量能比。
+func quadrant(avgRet, amountRatio float64) string {
+	vol := "缩量"
+	if amountRatio >= 1.1 {
+		vol = "放量"
+	} else if amountRatio >= 0.9 {
+		vol = "平量"
+	}
+	if avgRet >= 0 {
+		return vol + "上涨"
+	}
+	return vol + "下跌"
+}
+
+// GuideHistoryDay 情绪指南历史序列的一天。
+type GuideHistoryDay struct {
+	Date        string  `json:"date"`
+	LimitUp     int     `json:"limitUp"`
+	LimitDown   int     `json:"limitDown"`
+	Broke       int     `json:"broke"`
+	BreakRate   float64 `json:"breakRate"`
+	Amount      float64 `json:"amount"`      // 全市场成交额估算（亿）
+	AmountRatio float64 `json:"amountRatio"` // /前5日均
+	UpCount     int     `json:"upCount"`
+	DownCount   int     `json:"downCount"`
+	TempScore   float64 `json:"tempScore"`
+	Stage       string  `json:"stage"`
+}
+
+// guidePayload 组装 /api/market/guide：实时温度判定 + 30 日历史
+// （涨停/炸板/量能序列与温度分曲线）。
+func (mv *marketView) guidePayload(qc *quotes.Cache) map[string]any {
+	res := mv.get()
+	snap := qc.Snapshot()
+	rt := mv.sentimentRealtimeOf(res, snap, qc)
+
+	// 今日实时量能与广度（快照精确值）
+	todayAmt, upNow, downNow, cnt, retSum := 0.0, 0, 0, 0, 0.0
+	for _, q := range snap {
+		if q.Price <= 0 || q.PreClose <= 0 {
+			continue
+		}
+		todayAmt += q.Amount
+		if q.ChangePct > 0 {
+			upNow++
+		} else if q.ChangePct < 0 {
+			downNow++
+		}
+		retSum += q.ChangePct
+		cnt++
+	}
+	todayAmt /= 1e8
+	avgRetNow := 0.0
+	if cnt > 0 {
+		avgRetNow = retSum / float64(cnt)
+	}
+	_, include := quoteDayOf(res.AsOf, time.Now())
+
+	// 历史序列（近30日），按日期对齐量能/广度
+	amountIdx := map[string]int{}
+	for i, d := range res.Dates {
+		amountIdx[d] = i
+	}
+	amountRatioOf := func(i int) float64 {
+		if i <= 0 {
+			return 1
+		}
+		var sum float64
+		n := 0
+		for j := i - 5; j < i && j >= 0; j++ {
+			sum += res.Amounts[j]
+			n++
+		}
+		if n == 0 || sum <= 0 {
+			return 1
+		}
+		return res.Amounts[i] / (sum / float64(n))
+	}
+	hist := make([]GuideHistoryDay, 0, 30)
+	days := res.Days
+	if len(days) > 30 {
+		days = days[len(days)-30:]
+	}
+	for _, d := range days {
+		g := GuideHistoryDay{
+			Date: d.Date, LimitUp: d.LimitUp, LimitDown: d.LimitDown,
+			Broke: d.Broke, BreakRate: d.BreakRate,
+		}
+		if i, ok := amountIdx[d.Date]; ok {
+			g.Amount = math.Round(res.Amounts[i]*10) / 10
+			g.AmountRatio = amountRatioOf(i)
+			g.UpCount = res.UpCounts[i]
+			g.DownCount = res.DownCounts[i]
+		}
+		g.TempScore = tempScore(d.LimitUp, d.BreakRate, d.PromoteRate, g.AmountRatio, float64(d.MaxBoards))
+		g.Stage = tempStage(g.TempScore)
+		hist = append(hist, g)
+	}
+
+	// 今日（实时或定格）量能比：收盘更新前用今日快照额/昨日全天
+	amountRatioNow := 1.0
+	yesterdayAmt := 0.0
+	if n := len(res.Amounts); n >= 2 {
+		yesterdayAmt = res.Amounts[n-1-(boolToInt(include))]
+	}
+	if include { // 日线已含今日：直接用历史口径
+		if n := len(res.Amounts); n > 0 {
+			todayAmt = res.Amounts[n-1]
+			amountRatioNow = amountRatioOf(n - 1)
+		}
+	} else if yesterdayAmt > 0 && todayAmt > 0 {
+		amountRatioNow = todayAmt / yesterdayAmt
+	}
+	quad := quadrant(avgRetNow, amountRatioNow)
+	score := tempScore(rt.LimitUp, rt.BreakRate, rt.PromoteRate, amountRatioNow, float64(rt.MaxBoards))
+
+	realtime := map[string]any{
+		"asOf": res.AsOf, "updatedAt": rt.UpdatedAt, "final": include,
+		"limitUp": rt.LimitUp, "limitDown": rt.LimitDown, "broke": rt.Broke,
+		"breakRate": rt.BreakRate, "maxBoards": rt.MaxBoards,
+		"promoteRate": rt.PromoteRate,
+		"upCount": upNow, "downCount": downNow,
+		"amountToday": math.Round(todayAmt*10) / 10, "amountYesterday": math.Round(yesterdayAmt*10) / 10,
+		"amountRatio": math.Round(amountRatioNow*100) / 100,
+		"avgChange":   math.Round(avgRetNow*100) / 100,
+		"quadrant": quad, "tempScore": score, "stage": tempStage(score),
+	}
+	return map[string]any{"realtime": realtime, "history": hist}
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// sentimentRealtimeOf 复用情绪实时口径计算（sentimentPayload 的内部件）。
+func (mv *marketView) sentimentRealtimeOf(res *mvResult, snap map[string]tdx.Quote, qc *quotes.Cache) market.SentimentRealtime {
+	profiles := mv.st.AllProfiles()
+	pf := pctFor(profiles)
+	quotes := make([]market.RTQuote, 0, len(snap))
+	for _, q := range snap {
+		quotes = append(quotes, market.RTQuote{Symbol: q.Symbol, Price: q.Price, PreClose: q.PreClose, High: q.High})
+	}
+	_, include := quoteDayOf(res.AsOf, time.Now())
+	yesterdayLimit := 0
+	if n := len(res.Days); n >= 2 {
+		if include {
+			yesterdayLimit = res.Days[n-2].LimitUp
+		} else {
+			yesterdayLimit = res.Days[n-1].LimitUp
+		}
+	}
+	return market.ComputeSentimentRealtime(res.AsOf, qc.Updated().Format("15:04:05"), quotes, res.Streaks, pf, include, yesterdayLimit)
 }
 
 // overlayRealtime 用最新快照把板块行的实时均涨/封板家数覆盖上去，

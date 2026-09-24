@@ -187,6 +187,47 @@ export interface SectorsResult {
   byConcept: SectorRow[]
 }
 
+// 情绪指南：量能 + 涨跌停的温度判定。
+export interface GuideHistoryDay {
+  date: string
+  limitUp: number
+  limitDown: number
+  broke: number
+  breakRate: number
+  amount: number
+  amountRatio: number
+  upCount: number
+  downCount: number
+  tempScore: number
+  stage: string
+}
+
+export interface GuideRealtime {
+  asOf: string
+  updatedAt: string
+  final: boolean
+  limitUp: number
+  limitDown: number
+  broke: number
+  breakRate: number
+  maxBoards: number
+  promoteRate: number
+  upCount: number
+  downCount: number
+  amountToday: number
+  amountYesterday: number
+  amountRatio: number
+  avgChange: number
+  quadrant: string
+  tempScore: number
+  stage: string
+}
+
+export interface GuideResult {
+  realtime: GuideRealtime
+  history: GuideHistoryDay[]
+}
+
 export interface StockProfile {
   symbol: string
   name: string
@@ -330,6 +371,7 @@ export const api = {
   marketIndices: () => request<IndexInfo[]>('/api/market/indices'),
   marketSentiment: () => request<SentimentResult>('/api/market/sentiment'),
   marketSectors: () => request<SectorsResult>('/api/market/sectors'),
+  marketGuide: () => request<GuideResult>('/api/market/guide'),
   profile: (symbol: string) =>
     request<StockProfile>(`/api/stocks/${encodeURIComponent(symbol)}/profile`),
   syncProfile: (symbol: string) =>

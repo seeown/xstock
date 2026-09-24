@@ -438,6 +438,51 @@ td.num, th.num { text-align: right; }
 .mainline-row td { background: rgba(245, 181, 68, 0.06); }
 .mainline-row td:first-child { font-weight: 600; }
 
+/* ---------- 情绪指南 ---------- */
+.guide-verdict {
+  display: flex; gap: 18px; align-items: stretch;
+  padding: 18px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+.gv-score {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-width: 150px; padding: 0 18px;
+  border-right: 1px solid var(--line);
+}
+.gv-num { font-size: 52px; font-weight: 700; line-height: 1; color: var(--ink); }
+.gv-score.pos .gv-num { color: #f4577a; }
+.gv-score.neg .gv-num { color: #22c58b; }
+.gv-stage { font-size: 16px; font-weight: 600; margin-top: 6px; }
+.gv-quadrant { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.guide-tiles {
+  flex: 1;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px 14px;
+}
+.gt-tile {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 10px 12px;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.gt-tile span { font-size: 11.5px; color: var(--faint); }
+.gt-tile b { font-size: 17px; font-weight: 600; color: var(--ink); }
+.gt-tile em { font-style: normal; font-size: 11px; color: var(--muted); }
+.linechart-wrap { padding: 6px 2px 0; }
+.linechart { width: 100%; display: block; }
+.linechart-legend { display: flex; gap: 18px; padding: 4px 8px 10px; flex-wrap: wrap; }
+.lc-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.lc-item i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.lc-item b { color: var(--ink); font-weight: 600; }
+.stage-chip { font-size: 12px; padding: 2px 8px; border-radius: 6px; background: rgba(126,152,191,0.12); }
+.stage-chip.pos { background: rgba(244,87,122,0.15); color: #ffb1c1; }
+.stage-chip.neg { background: rgba(34,197,139,0.14); color: #7ce3bb; }
+.guide-table { font-size: 13px; }
+
 /* ---------- 连板梯队 ---------- */
 .ladder { display: flex; flex-direction: column; gap: 12px; }
 .ladder-tier {

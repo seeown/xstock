@@ -387,6 +387,11 @@ func main() {
 		writeJSON(w, 200, mv.sectorsPayload(quoteCache))
 	})
 
+	// GET /api/market/guide — 情绪指南：量能+涨跌停的温度判定（实时+30日序列）。
+	mux.HandleFunc("GET /api/market/guide", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, mv.guidePayload(quoteCache))
+	})
+
 	mux.HandleFunc("GET /api/screen", func(w http.ResponseWriter, r *http.Request) {
 		days := queryInt(r, "days", 10)
 		p := market.DefaultNPParams()
