@@ -11,7 +11,7 @@ import (
 
 	"github.com/joho/godotenv"
 
-	"nstock/internal/market"
+	"xstock/internal/market"
 )
 
 // testServer describes the PostgreSQL instance tests run against, taken from
@@ -64,7 +64,7 @@ func openTestStore(t *testing.T) *Store {
 		t.Skipf("postgres unreachable at %s:%s: %v", srv.host, srv.port, err)
 	}
 
-	dbName := fmt.Sprintf("nstock_test_%d", time.Now().UnixNano())
+	dbName := fmt.Sprintf("xstock_test_%d", time.Now().UnixNano())
 	if _, err := admin.ExecContext(ctx, `CREATE DATABASE `+dbName); err != nil {
 		t.Fatalf("create test database: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestReplacePersistsAcrossReopen(t *testing.T) {
 	if err != nil {
 		t.Skipf("postgres config: %v", err)
 	}
-	dbName := fmt.Sprintf("nstock_test_%d", time.Now().UnixNano())
+	dbName := fmt.Sprintf("xstock_test_%d", time.Now().UnixNano())
 	ctx := context.Background()
 
 	admin, err := sql.Open("pgx", srv.dsn("postgres"))
@@ -165,7 +165,7 @@ func TestSaveProfilePersistsAndSwapsConcepts(t *testing.T) {
 	if err != nil {
 		t.Skipf("postgres config: %v", err)
 	}
-	dbName := fmt.Sprintf("nstock_test_%d", time.Now().UnixNano())
+	dbName := fmt.Sprintf("xstock_test_%d", time.Now().UnixNano())
 	ctx := context.Background()
 
 	admin, err := sql.Open("pgx", srv.dsn("postgres"))

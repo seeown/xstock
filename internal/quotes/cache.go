@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"nstock/internal/tdx"
+	"xstock/internal/tdx"
 )
 
 // batch size matches tdx.Client.FetchQuotes cap.

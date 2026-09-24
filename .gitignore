@@ -1,4 +1,4 @@
-nstock-server
+xstock-server
 *.test
 .DS_Store
 web/node_modules

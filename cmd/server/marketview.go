@@ -14,10 +14,10 @@ import (
 	"sync"
 	"time"
 
-	"nstock/internal/market"
-	"nstock/internal/quotes"
-	"nstock/internal/store"
-	"nstock/internal/tdx"
+	"xstock/internal/market"
+	"xstock/internal/quotes"
+	"xstock/internal/store"
+	"xstock/internal/tdx"
 )
 
 // sectorWindow 等权指数与逐日涨停的回看窗口（交易日）。

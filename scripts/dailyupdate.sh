@@ -1,5 +1,5 @@
 #!/bin/bash
-# NStock 每日增量更新（launchd 于工作日 17:00 调用，错过时段唤醒后补跑）
+# xstock 每日增量更新（launchd 于工作日 17:00 调用，错过时段唤醒后补跑）
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 set -a; source "$REPO/.env.produce"; set +a
 export GOTOOLCHAIN=auto

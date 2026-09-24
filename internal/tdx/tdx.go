@@ -12,7 +12,7 @@ import (
 	"github.com/bensema/gotdx/proto"
 	"github.com/bensema/gotdx/types"
 
-	"nstock/internal/market"
+	"xstock/internal/market"
 )
 
 // Client wraps a gotdx client. gotdx keeps its own host pool and reconnects

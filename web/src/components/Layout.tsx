@@ -62,10 +62,10 @@ export default function Layout({ children }: { children: ReactNode }) {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <img src="/logo.png" alt="NStock" className="brand-logo" />
+          <img src="/logo.png" alt="xstock" className="brand-logo" />
           <div>
-            <div className="brand-name">NStock</div>
-            <div className="brand-sub">N字战法研究终端</div>
+            <div className="brand-name">xstock</div>
+            <div className="brand-sub">战法研究的交易魔方</div>
           </div>
         </div>
         <nav>

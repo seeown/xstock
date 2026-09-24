@@ -1,4 +1,4 @@
-module nstock
+module xstock
 
 go 1.26.1
 

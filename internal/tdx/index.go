@@ -7,7 +7,7 @@ import (
 	"github.com/bensema/gotdx/proto"
 	"github.com/bensema/gotdx/types"
 
-	"nstock/internal/market"
+	"xstock/internal/market"
 )
 
 // IndexDef describes one market index that the dashboard can display.

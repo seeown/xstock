@@ -13,11 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"nstock/internal/config"
-	"nstock/internal/market"
-	"nstock/internal/quotes"
-	"nstock/internal/store"
-	"nstock/internal/tdx"
+	"xstock/internal/config"
+	"xstock/internal/market"
+	"xstock/internal/quotes"
+	"xstock/internal/store"
+	"xstock/internal/tdx"
 )
 
 //go:embed all:web/dist
@@ -46,7 +46,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	addr := getenv("NSTOCK_ADDR", ":8080")
+	addr := getenv("XSTOCK_ADDR", ":8080")
 
 	// Loading the full market's bars (16M+ rows) into the cache can take a
 	// few minutes after a bulk import; keep a generous hard cap.
@@ -485,7 +485,7 @@ func main() {
 		fileServer.ServeHTTP(w, r)
 	})
 
-	log.Printf("NStock API listening on %s (postgres: %s, demo symbol: DEMO)", listenURL(addr), pgSummary())
+	log.Printf("xstock API listening on %s (postgres: %s, demo symbol: DEMO)", listenURL(addr), pgSummary())
 	log.Fatal(http.ListenAndServe(addr, mux))
 }
 

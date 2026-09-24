@@ -14,7 +14,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	"nstock/internal/market"
+	"xstock/internal/market"
 )
 
 type Store struct {
