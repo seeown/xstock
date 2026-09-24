@@ -272,7 +272,7 @@ export default function Market() {
           title="连板梯队"
           sub={
             sent?.ladder
-              ? `按昨日梯队从高到低 · ${sent.ladder.final ? '收盘定格' : '盘中进行时（未封仍可能回封）'} · 点击选手看K线`
+              ? `高标从高到低（${sent.ladder.asOf} 梯队） · ${sent.ladder.final ? '收盘定格' : '盘中进行时（未封仍可能回封）'} · 点击选手看K线`
               : '加载中…'
           }
         />
@@ -281,7 +281,7 @@ export default function Market() {
             {sent.ladder.tiers.map(t => (
               <div key={t.height} className="ladder-tier">
                 <div className="tier-head">
-                  <b className="tier-name">{t.height === 1 ? '昨日首板' : `昨日 ${t.height} 板`}</b>
+                  <b className="tier-name">{`${t.height + 1}进${t.height}`}</b>
                   <span className="muted">{t.total} 只 → 晋级 {t.promoted.length} 只</span>
                   <span className={`tier-rate ${t.promoteRate >= 30 ? 'pos' : t.promoteRate < 15 ? 'neg' : ''}`}>
                     {pct(t.promoteRate)}
@@ -310,7 +310,7 @@ export default function Market() {
             {sent.ladder.newBoards.length > 0 && (
               <div className="ladder-tier new-boards">
                 <div className="tier-head">
-                  <b className="tier-name">今日新晋首板</b>
+                  <b className="tier-name">首板</b>
                   <span className="muted">{sent.ladder.newBoards.length} 只</span>
                 </div>
                 <div className="tier-body">
