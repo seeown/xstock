@@ -480,7 +480,10 @@ td.num, th.num { text-align: right; }
 .kline-pop {
   position: fixed; z-index: 60;
   width: 560px; max-width: calc(100vw - 16px);
-  background: var(--panel);
+  /* 毛玻璃：深空底压住背后的表格文字，残留轮廓糊成氛围 */
+  background: rgba(13, 27, 51, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--line-strong);
   border-radius: 10px;
   box-shadow: 0 14px 44px rgba(0, 0, 0, 0.55);
