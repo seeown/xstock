@@ -1422,6 +1422,31 @@ table.tb { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .equity-wrap .legend { padding: 10px 8px 0; }
 .equity-wrap .legend span { display: inline-flex; align-items: center; }
 
+/* ---- 个股页：原生 select 胶囊化 + 排序列头 + 抽屉小节 ---- */
+select.select-pill.native {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 24px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 55%, calc(100% - 10px) 55%;
+  background-size: 4px 4px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+.tb th.sortable { cursor: pointer; user-select: none; }
+.tb th.sortable:hover { color: var(--accent-soft); }
+.tb th.sorted { color: var(--accent-soft); }
+.drawer-sec { margin: 14px 0; }
+.drawer-sec .h {
+  font-size: 12.5px; font-weight: 700; color: var(--ink);
+  display: flex; align-items: center; gap: 7px; margin-bottom: 8px;
+}
+.drawer-sec .h .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--grad-aurora);
+  box-shadow: 0 0 8px rgba(56, 189, 248, .5);
+}
+
 /* ---- reduced-motion ---- */
 @media (prefers-reduced-motion: reduce) {
   .skel::after { animation: none; }

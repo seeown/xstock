@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, type ConceptCount, type ProfileListItem, type ProfilePageResult, type Quote, type StockProfile } from '../api'
+import { api, type ConceptCount, type ProfileListItem, type ProfilePageResult, type Quote, type SectorRow, type Signal, type StockProfile } from '../api'
 import { KlineDetailModal, KlinePopover, useKlinePreview } from '../components/klinePreview'
-import { Banner, Card, CardHead, fmt, pct } from '../components/ui'
+import { Banner, Button, Card, Chip, EmptyState, SearchPill, Skeleton, fmt, pct } from '../components/ui'
 
 const BOARDS = ['上证主板', '深证主板', '创业板', '科创板', '北交所']
 
@@ -51,11 +51,13 @@ export default function Stocks() {
   const [loading, setLoading] = useState(true)
   const [industries, setIndustries] = useState<string[]>([])
   const [concepts, setConcepts] = useState<ConceptCount[]>([])
+  const [sectors, setSectors] = useState<SectorRow[]>([])
   const [quotes, setQuotes] = useState<Record<string, Quote>>({})
   const [quotesNote, setQuotesNote] = useState('')
   const [syncing, setSyncing] = useState<Record<string, boolean>>({})
   const [drawerItem, setDrawerItem] = useState<ProfileListItem | null>(null)
   const [drawerProfile, setDrawerProfile] = useState<StockProfile | null>(null)
+  const [drawerSignals, setDrawerSignals] = useState<Signal[] | null>(null)
   const [feedback, setFeedback] = useState<{ text: string; kind: 'info' | 'error' | 'success' }>({ text: '', kind: 'info' })
   const loadSeq = useRef(0)
 
@@ -86,6 +88,7 @@ export default function Stocks() {
   useEffect(() => {
     api.industries().then(setIndustries).catch(() => {})
     api.concepts().then(setConcepts).catch(() => {})
+    api.marketSectors().then(s => setSectors(s.byIndustry)).catch(() => {})
   }, [])
 
   const load = useCallback(async () => {
@@ -145,10 +148,17 @@ export default function Stocks() {
   const openDrawer = async (item: ProfileListItem) => {
     setDrawerItem(item)
     setDrawerProfile(null)
+    setDrawerSignals(null)
     try {
-      setDrawerProfile(await api.profile(item.symbol))
+      const [p, sigs] = await Promise.all([
+        api.profile(item.symbol),
+        item.barCount > 0 ? api.signals(item.symbol) : Promise.resolve([]),
+      ])
+      setDrawerProfile(p)
+      setDrawerSignals(sigs)
     } catch {
       setDrawerProfile(null)
+      setDrawerSignals([])
     }
   }
 
@@ -174,6 +184,14 @@ export default function Stocks() {
   const activeConceptCount = useMemo(() => concepts.find(c => c.concept === filters.concept)?.count, [concepts, filters.concept])
   const sortIndicator = (key: string) => (sortKey === key ? (sortOrder === 'desc' ? ' ▼' : ' ▲') : '')
 
+  // 抽屉：板块强度（行业对应的 SectorRow）+ 最近信号（逐项打勾）
+  const drawerSector = useMemo(
+    () => sectors.find(s => s.name === drawerItem?.industry) ?? null,
+    [sectors, drawerItem],
+  )
+  const latestSignal = drawerSignals && drawerSignals.length ? drawerSignals[drawerSignals.length - 1] : null
+  const olderSignals = drawerSignals ? drawerSignals.slice(0, -1).slice(-5).reverse() : []
+
   return (
     <div className="page">
       <header className="page-head">
@@ -186,32 +204,27 @@ export default function Stocks() {
       <Banner text={feedback.text} kind={feedback.kind} />
 
       <Card>
-        <div className="filter-bar">
-          <input
-            className="filter-search"
+        <div className="fbar">
+          <SearchPill
             placeholder="搜索代码 / 名称"
             value={filters.q}
             onChange={e => patchFilters({ q: e.target.value })}
-            spellCheck={false}
           />
-          <select value={filters.board} onChange={e => patchFilters({ board: e.target.value })}>
+          <select className="select-pill native" value={filters.board} onChange={e => patchFilters({ board: e.target.value })}>
             <option value="">全部板块</option>
             {BOARDS.map(b => <option key={b} value={b}>{b}</option>)}
           </select>
-          <select value={filters.industry} onChange={e => patchFilters({ industry: e.target.value })}>
+          <select className="select-pill native" value={filters.industry} onChange={e => patchFilters({ industry: e.target.value })}>
             <option value="">全部行业</option>
             {industries.map(i => <option key={i} value={i}>{i}</option>)}
           </select>
-          <select value={filters.concept} onChange={e => patchFilters({ concept: e.target.value })}>
+          <select className="select-pill native" value={filters.concept} onChange={e => patchFilters({ concept: e.target.value })}>
             <option value="">全部概念</option>
             {concepts.map(c => <option key={c.concept} value={c.concept}>{c.concept}（{c.count}）</option>)}
           </select>
-          <label className="filter-check">
-            <input type="checkbox" checked={filters.syncedOnly} onChange={e => patchFilters({ syncedOnly: e.target.checked })} />
-            仅看已同步K线
-          </label>
+          <Chip active={filters.syncedOnly} onClick={() => patchFilters({ syncedOnly: !filters.syncedOnly })}>仅看已同步K线</Chip>
           {(filters.q || filters.board || filters.industry || filters.concept || filters.syncedOnly) && (
-            <button className="btn ghost small" onClick={() => { setFilters(EMPTY_FILTERS); setAppliedQ(''); setPage(1) }}>重置</button>
+            <Button variant="mini" onClick={() => { setFilters(EMPTY_FILTERS); setAppliedQ(''); setPage(1) }}>重置</Button>
           )}
         </div>
       </Card>
@@ -235,16 +248,15 @@ export default function Stocks() {
         </details>
       )}
 
-      <Card>
-        <CardHead
-          title="股票列表"
-          sub={`第 ${result.page} / ${totalPages} 页 · 每页 ${result.pageSize} 只${quotesNote ? ` · ${quotesNote}` : ''}`}
-        />
-        {loading ? (
-          <div className="chart-empty">正在加载…</div>
-        ) : (
-          <div className="table-wrap" onScroll={kline.leaveRow}>
-            <table>
+      <div className="table-panel">
+        <div className="table-wrap" onScroll={kline.leaveRow}>
+          {loading ? (
+            <div style={{ padding: 18, display: 'grid', gap: 12 }}>
+              <Skeleton w="40%" />
+              <Skeleton h={36} count={6} />
+            </div>
+          ) : result.items.length ? (
+            <table className="tb">
               <thead>
                 <tr>
                   {COLUMNS.map(col => (
@@ -263,62 +275,63 @@ export default function Stocks() {
                 {result.items.map(item => {
                   const q = quotes[item.symbol]
                   return (
-                    <tr key={item.symbol} {...rowHover(item)}>
-                      <td className="mono">
+                    <tr key={item.symbol} className="rowlink" onClick={() => openDrawer(item)} {...rowHover(item)}>
+                      <td>
                         {item.barCount > 0 ? (
                           <button
-                            className="link-btn mono"
+                            className="link-btn code"
                             title="点击查看K线"
-                            onClick={() => kline.openDetail(klineTarget(item))}
+                            onClick={e => { e.stopPropagation(); kline.openDetail(klineTarget(item)) }}
                           >
                             {item.symbol}
                           </button>
                         ) : (
-                          item.symbol
+                          <span className="code">{item.symbol}</span>
                         )}
                       </td>
-                      <td>
-                        <button className="link-btn" onClick={() => openDrawer(item)}>
-                          {item.name || item.symbol}
-                        </button>
-                      </td>
+                      <td><span className="name" style={{ marginLeft: 0, color: 'var(--ink)' }}>{item.name || item.symbol}</span></td>
                       <td>{item.board && <span className="concept-chip board-chip">{item.board}</span>}</td>
-                      <td className="muted">{item.industry || '—'}</td>
+                      <td className="muted-c">{item.industry || '—'}</td>
                       <td className="num">{q && q.price > 0 ? fmt(q.price) : '—'}</td>
-                      <td className={`num ${q && q.price > 0 ? (q.changePct >= 0 ? 'pos' : 'neg') : ''}`}>
+                      <td className={`num ${q && q.price > 0 ? (q.changePct >= 0 ? 'up-text' : 'down-text') : ''}`}>
                         {q && q.price > 0 && q.preClose > 0 ? `${q.changePct >= 0 ? '+' : ''}${pct(q.changePct)}` : '—'}
                       </td>
                       <td className="num">{q ? fmtAmount(q.amount) : '—'}</td>
-                      <td className="muted">{item.listDate || '—'}</td>
+                      <td className="muted-c">{item.listDate || '—'}</td>
                       <td className="num" title={item.concepts.join('、')}>{item.concepts.length || '—'}</td>
                       <td>
                         {item.barCount > 0 ? (
-                          <span className="muted">{item.barCount} 根</span>
+                          <span className="muted-c">{item.barCount} 根</span>
                         ) : (
-                          <button className="btn ghost small" onClick={() => handleSync(item.symbol)} disabled={!!syncing[item.symbol]}>
-                            {syncing[item.symbol] ? '同步中…' : '同步日K'}
-                          </button>
+                          <Button variant="mini" onClick={e => { e.stopPropagation(); handleSync(item.symbol) }} loading={!!syncing[item.symbol]}>
+                            同步日K
+                          </Button>
                         )}
                       </td>
                       <td>
-                        <button className="link-btn" onClick={() => navigate(`/?symbol=${item.symbol}`)}>看K线</button>
+                        <button className="link-btn" onClick={e => { e.stopPropagation(); navigate(`/?symbol=${item.symbol}`) }}>看K线</button>
                       </td>
                     </tr>
                   )
                 })}
-                {!result.items.length && (
-                  <tr><td colSpan={11} className="table-empty">没有符合条件的股票</td></tr>
-                )}
               </tbody>
             </table>
-          </div>
-        )}
-        <div className="pagination-row">
-          <button className="btn ghost small" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1 || loading}>上一页</button>
-          <span className="muted">第 {result.page} / {totalPages} 页 · 共 {result.total} 只</span>
-          <button className="btn ghost small" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages || loading}>下一页</button>
+          ) : (
+            <EmptyState
+              title="没有符合条件的股票"
+              desc="筛选条件可能过窄。可清空搜索词、放宽板块/行业/概念，或关闭「仅看已同步K线」。"
+              actions={<Button variant="ghost" onClick={() => { setFilters(EMPTY_FILTERS); setAppliedQ('') }}>重置全部筛选</Button>}
+            />
+          )}
         </div>
-      </Card>
+        <div className="table-foot">
+          第 {result.page} / {totalPages} 页 · 共 {result.total} 只{quotesNote ? ` · ${quotesNote}` : ''}
+          <span className="keys" style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+            <Button variant="mini" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1 || loading}>‹ 上一页</Button>
+            <Button variant="mini" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages || loading}>下一页 ›</Button>
+          </span>
+        </div>
+      </div>
 
       {drawerItem && (
         <>
@@ -332,7 +345,7 @@ export default function Stocks() {
                 </div>
                 <div className="muted mono">{drawerItem.symbol}</div>
               </div>
-              <button className="btn ghost small" onClick={() => setDrawerItem(null)}>关闭</button>
+              <Button variant="ghost" onClick={() => setDrawerItem(null)}>关闭</Button>
             </div>
             <div className="drawer-body">
               <div className="profile-meta">
@@ -346,16 +359,65 @@ export default function Stocks() {
                   {drawerItem.concepts.map(c => <span key={c} className="concept-chip">{c}</span>)}
                 </div>
               )}
+
+              {/* 信号明细：逐项打勾（个股详情契约：每个候选能回答「为什么入选」） */}
+              {latestSignal && (
+                <div className="drawer-sec">
+                  <div className="h"><span className="dot" />最近 N 字信号 · {latestSignal.date}</div>
+                  <div className="kv"><span className="k">段内涨幅</span><span className="ok">+{latestSignal.risePct.toFixed(1)}% ✓</span></div>
+                  <div className="kv"><span className="k">回调幅度</span><span className="ok">{latestSignal.pullbackPct.toFixed(1)}% ✓</span></div>
+                  <div className="kv"><span className="k">突破量比</span><span className="ok">{latestSignal.volumeRatio.toFixed(1)}× ✓</span></div>
+                  <div className="kv">
+                    <span className="k">当日涨跌</span>
+                    <span className={latestSignal.dayChangePct >= 0 ? 'ok' : 'no'}>
+                      {latestSignal.dayChangePct >= 0 ? '+' : ''}{latestSignal.dayChangePct.toFixed(2)}% {latestSignal.dayChangePct >= 0 ? '✓' : '✗'}
+                    </span>
+                  </div>
+                  <div className="kv"><span className="k">突破价</span><span className="mono" style={{ color: 'var(--ink)' }}>{fmt(latestSignal.breakoutPrice)}</span></div>
+                  <div className="kv"><span className="k">判定说明</span><span style={{ textAlign: 'right', maxWidth: '60%' }}>{latestSignal.reason}</span></div>
+                </div>
+              )}
+              {drawerSignals?.length === 0 && drawerItem.barCount > 0 && (
+                <p className="muted">该股暂无 N 字信号记录。</p>
+              )}
+
+              {/* 板块强度：行业对应的市场统计 */}
+              <div className="drawer-sec">
+                <div className="h"><span className="dot" />板块强度{drawerSector ? ` · ${drawerSector.name}` : ''}</div>
+                {drawerSector ? (
+                  <>
+                    <div className="kv"><span className="k">板块平均涨幅</span><span className={drawerSector.avgChange >= 0 ? 'up-text' : 'down-text'}>{drawerSector.avgChange >= 0 ? '+' : ''}{drawerSector.avgChange.toFixed(2)}%</span></div>
+                    <div className="kv"><span className="k">涨停家数</span><span className="ok">{drawerSector.limitUp} / {drawerSector.count} 只</span></div>
+                    <div className="kv"><span className="k">昨日涨停续板</span><span>{drawerSector.lastDayLimit}</span></div>
+                  </>
+                ) : (
+                  <div className="kv"><span className="k">{drawerItem.industry || '未分类行业'}</span><span className="muted-c">暂无板块统计</span></div>
+                )}
+              </div>
+
               {drawerProfile === null
                 ? <p className="muted">正在加载档案…</p>
                 : drawerProfile.business
                   ? <pre className="drawer-business">{drawerProfile.business}</pre>
                   : <p className="muted">暂无业务描述（北交所股票暂无 F10 数据）。</p>}
+
+              {olderSignals.length > 0 && (
+                <div className="drawer-sec">
+                  <div className="h"><span className="dot" />历史信号</div>
+                  {olderSignals.map(s => (
+                    <div className="kv" key={s.date}>
+                      <span className="k mono">{s.date}</span>
+                      <span className={s.dayChangePct >= 0 ? 'up-text' : 'down-text'}>{s.dayChangePct >= 0 ? '+' : ''}{s.dayChangePct.toFixed(2)}%</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div className="drawer-actions">
-                <button className="btn primary small" onClick={() => navigate(`/?symbol=${drawerItem.symbol}`)}>看K线 · 回测</button>
-                <button className="btn ghost small" onClick={() => handleSync(drawerItem.symbol)} disabled={!!syncing[drawerItem.symbol]}>
-                  {syncing[drawerItem.symbol] ? '同步中…' : '同步日K'}
-                </button>
+                <Button onClick={() => navigate(`/?symbol=${drawerItem.symbol}`)}>看K线 · 回测</Button>
+                <Button variant="ghost" onClick={() => handleSync(drawerItem.symbol)} loading={!!syncing[drawerItem.symbol]}>
+                  同步日K
+                </Button>
               </div>
             </div>
           </aside>
