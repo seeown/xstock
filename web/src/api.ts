@@ -42,6 +42,16 @@ export interface FirstBoardParams {
 export type StrategyKind = 'n' | 'zt'
 export type StrategyParams = NParams | FirstBoardParams
 
+// 服务端 param_sets 表的一行：用户保存的参数组，可标记为某策略的回测默认。
+export interface ParamSet {
+  id: number
+  name: string
+  strategy: StrategyKind
+  params: StrategyParams
+  isDefault: boolean
+  updatedAt?: string
+}
+
 export interface Signal {
   symbol: string
   date: string
@@ -357,6 +367,25 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 export const api = {
   defaultParams: (strategy: StrategyKind = 'n') =>
     request<StrategyParams>(`/api/params/default?strategy=${strategy}`),
+  paramSets: () => request<ParamSet[]>('/api/params/sets'),
+  saveParamSet: (body: { name: string; strategy: StrategyKind; params: StrategyParams }) =>
+    request<ParamSet>('/api/params/sets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  updateParamSet: (id: number, body: { name: string; params: StrategyParams }) =>
+    request<{ ok: boolean }>(`/api/params/sets/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  deleteParamSet: (id: number) =>
+    request<{ ok: boolean }>(`/api/params/sets/${id}`, { method: 'DELETE' }),
+  setDefaultParamSet: (id: number) =>
+    request<{ ok: boolean }>(`/api/params/sets/${id}/default`, { method: 'POST' }),
+  clearDefaultParamSet: (strategy: StrategyKind) =>
+    request<{ ok: boolean }>(`/api/params/default/clear?strategy=${strategy}`, { method: 'POST' }),
   bars: (symbol: string) => request<Candle[]>(`/api/stocks/${encodeURIComponent(symbol)}/bars`),
   signals: (symbol: string, strategy: StrategyKind = 'n') =>
     request<Signal[]>(`/api/stocks/${encodeURIComponent(symbol)}/signals?strategy=${strategy}`),

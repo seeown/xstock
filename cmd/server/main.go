@@ -84,13 +84,131 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"status": "ok"}) })
 	// strategy=n（通用 N 字，默认）或 zt（首板涨停→缩量回调→放量突破）。
+	// 用户在库里设置的默认参数组优先；未设置或解析失败时回退内置值，
+	// 反序列化只覆盖 JSON 里出现的字段——部分参数也能生效。
 	mux.HandleFunc("GET /api/params/default", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("strategy") == "zt" {
-			writeJSON(w, 200, market.DefaultFirstBoardParams())
+		strategy := r.URL.Query().Get("strategy")
+		// 从内置值起步做部分覆盖：unmarshal 到已初始化的结构体，
+		// JSON 里没出现的字段保留内置值；库默认解析失败则整组回退内置。
+		if strategy == "zt" {
+			zt := market.DefaultFirstBoardParams()
+			if ps, err := s.DefaultParamSet(r.Context(), strategy); err != nil {
+				log.Printf("读取默认参数组失败，使用内置值: %v", err)
+			} else if ps != nil {
+				if err := json.Unmarshal(ps.Params, &zt); err != nil {
+					log.Printf("默认参数组 %s 解析失败，使用内置值: %v", ps.Name, err)
+				}
+			}
+			writeJSON(w, 200, zt)
 			return
 		}
-		writeJSON(w, 200, market.DefaultParams())
+		n := market.DefaultParams()
+		if ps, err := s.DefaultParamSet(r.Context(), strategy); err != nil {
+			log.Printf("读取默认参数组失败，使用内置值: %v", err)
+		} else if ps != nil {
+			if err := json.Unmarshal(ps.Params, &n); err != nil {
+				log.Printf("默认参数组 %s 解析失败，使用内置值: %v", ps.Name, err)
+			}
+		}
+		writeJSON(w, 200, n)
 	})
+
+	// 参数组 CRUD：策略说明页的参数组管理与「设为回测默认」。
+	mux.HandleFunc("GET /api/params/sets", func(w http.ResponseWriter, r *http.Request) {
+		sets, err := s.ListParamSets(r.Context())
+		if err != nil {
+			errorJSON(w, 500, err.Error())
+			return
+		}
+		writeJSON(w, 200, sets)
+	})
+
+	type paramSetBody struct {
+		Name     string          `json:"name"`
+		Strategy string          `json:"strategy"`
+		Params   json.RawMessage `json:"params"`
+	}
+
+	mux.HandleFunc("POST /api/params/sets", func(w http.ResponseWriter, r *http.Request) {
+		var body paramSetBody
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			errorJSON(w, 400, "invalid json: "+err.Error())
+			return
+		}
+		if body.Name == "" || (body.Strategy != "n" && body.Strategy != "zt") || len(body.Params) == 0 {
+			errorJSON(w, 400, "name, strategy (n|zt) and params are required")
+			return
+		}
+		ps, err := s.CreateParamSet(r.Context(), body.Name, body.Strategy, body.Params)
+		if err != nil {
+			errorJSON(w, 500, err.Error())
+			return
+		}
+		writeJSON(w, 200, ps)
+	})
+
+	mux.HandleFunc("PUT /api/params/sets/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil {
+			errorJSON(w, 400, "invalid id")
+			return
+		}
+		var body paramSetBody
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			errorJSON(w, 400, "invalid json: "+err.Error())
+			return
+		}
+		if body.Name == "" || len(body.Params) == 0 {
+			errorJSON(w, 400, "name and params are required")
+			return
+		}
+		if err := s.UpdateParamSet(r.Context(), id, body.Name, body.Params); err != nil {
+			errorJSON(w, 500, err.Error())
+			return
+		}
+		writeJSON(w, 200, map[string]bool{"ok": true})
+	})
+
+	mux.HandleFunc("DELETE /api/params/sets/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil {
+			errorJSON(w, 400, "invalid id")
+			return
+		}
+		if err := s.DeleteParamSet(r.Context(), id); err != nil {
+			errorJSON(w, 500, err.Error())
+			return
+		}
+		writeJSON(w, 200, map[string]bool{"ok": true})
+	})
+
+	mux.HandleFunc("POST /api/params/sets/{id}/default", func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil {
+			errorJSON(w, 400, "invalid id")
+			return
+		}
+		if err := s.SetDefaultParamSet(r.Context(), id); err != nil {
+			errorJSON(w, 500, err.Error())
+			return
+		}
+		writeJSON(w, 200, map[string]bool{"ok": true})
+	})
+
+	// strategy=n|zt；清除后回退内置默认值。
+	mux.HandleFunc("POST /api/params/default/clear", func(w http.ResponseWriter, r *http.Request) {
+		strategy := r.URL.Query().Get("strategy")
+		if strategy != "n" && strategy != "zt" {
+			errorJSON(w, 400, "strategy must be n or zt")
+			return
+		}
+		if err := s.ClearDefaultParamSet(r.Context(), strategy); err != nil {
+			errorJSON(w, 500, err.Error())
+			return
+		}
+		writeJSON(w, 200, map[string]bool{"ok": true})
+	})
+
 	mux.HandleFunc("GET /api/stocks", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, s.Symbols()) })
 
 	// Stock browser: filtered profiles over the whole market, sortable on

@@ -15,7 +15,7 @@
 | 个股行情 | A 股全市场浏览：板块/行业/概念筛选、档案抽屉（信号明细逐项打勾 + 板块强度）、一键同步日 K |
 | 大盘行情 | 指数 K 线 + MA5/10/20/30/60/年线(250) + 成交量 |
 | 情绪指南 | 大盘温度计（五档色带仪表盘）、涨停/炸板/量能双轴走势、情绪温度分历史 |
-| 策略说明 | 战法规则、参数组管理（内置只读可另存、自定义本地保存）、API 一览 |
+| 策略说明 | 战法规则、参数组管理（存 PostgreSQL，内置只读可另存；**设为默认后回测页加载即采用**）、API 一览 |
 | 数据管理 | 同步状态、序列管理、增量更新 |
 
 ## 系统架构
@@ -134,7 +134,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.xstock.dailyupdate.p
 | 市场 | `GET /api/market/indices·sectors·sentiment·guide` | 指数、板块、情绪、大盘指南 |
 | 个股 | `GET /api/stocks`、`/api/stocks/{symbol}/bars·profile·signals`、`GET /api/quotes` | 股票池、日线、档案、信号、实时报价 |
 | 筛选 | `GET /api/screen`、`GET /api/concepts·industries` | N 字全市场筛查与概念/行业过滤 |
-| 回测 | `POST /api/backtests/{symbol}`、`GET /api/params/default` | 回测执行与默认参数 |
+| 回测 | `POST /api/backtests/{symbol}`、`GET /api/params/default`、`GET/POST /api/params/sets`、`PUT/DELETE /api/params/sets/{id}`、`POST /api/params/sets/{id}/default`、`POST /api/params/default/clear` | 回测执行、默认参数（库默认优先、内置兜底）、参数组管理 |
 | 数据 | `POST /api/sync/{symbol}`、`POST /api/bars/{symbol}`、`POST /api/profile/sync/{symbol}`、`GET /api/sync-state` | 同步、导入、状态 |
 | 系统 | `GET /health`、`POST /api/admin/reload` | 健康检查、缓存热刷新 |
 

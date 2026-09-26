@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { api, type StrategyKind, type StrategyParams } from '../api'
+import { api, type ParamSet, type StrategyKind, type StrategyParams } from '../api'
 import { Button, Card, CardHead, TextField } from '../components/ui'
 
 const rules = [
@@ -46,14 +46,16 @@ const tradeRules: Array<[string, string]> = [
 ]
 
 const endpoints: Array<[string, string, string]> = [
-  ['GET', '/api/params/default', '默认策略参数'],
+  ['GET', '/api/params/default', '默认策略参数（库默认优先，内置兜底）'],
+  ['GET', '/api/params/sets', '参数组列表'],
+  ['POST', '/api/params/sets', '新建参数组'],
+  ['PUT', '/api/params/sets/{id}', '更新参数组'],
+  ['DELETE', '/api/params/sets/{id}', '删除参数组'],
+  ['POST', '/api/params/sets/{id}/default', '设为该策略回测默认'],
+  ['POST', '/api/params/default/clear', '恢复内置默认'],
   ['GET', '/api/market/indices', '大盘指数列表'],
-  ['GET', '/api/stocks', '本地股票池列表'],
-  ['GET', '/api/stocks/{symbol}/bars', '获取日线序列'],
-  ['GET', '/api/stocks/{symbol}/signals', '默认参数信号'],
   ['POST', '/api/backtests/{symbol}', '执行回测'],
   ['POST', '/api/sync/{symbol}', '同步通达信前复权日线'],
-  ['POST', '/api/bars/{symbol}', '导入自定义日线 JSON'],
 ]
 
 // 参数字段的中文标签（详情表单用；与回测页字段定义一致）
@@ -66,83 +68,161 @@ const FIELD_LABELS: Record<string, string> = {
   boardVolRatioMax: '板日量比上限（×）', breakoutVolRatioMin: '突破量比下限（×）',
   breakoutVolRatioMax: '突破量比上限（×）',
   stopLossPct: '止损线（%）', takeProfitPct: '止盈线（%）', maxHoldDays: '最长持仓（天）',
-  excludeOneWordBoard: '排除一字首板',
 }
 
-interface ParamGroup {
+// 旧版把自定义组存在浏览器 localStorage；检测到就提供一次性迁移。
+const LS_KEY = 'xstock.param-groups'
+
+interface Row {
   id: string
   name: string
   strategy: StrategyKind
   params: StrategyParams
-  builtin?: boolean
-  savedAt?: string
-}
-
-const LS_KEY = 'xstock.param-groups'
-const loadGroups = (): ParamGroup[] => {
-  try {
-    return JSON.parse(localStorage.getItem(LS_KEY) ?? '[]') as ParamGroup[]
-  } catch {
-    return []
-  }
+  builtin: boolean
+  isDefault: boolean
 }
 
 export default function Strategy() {
-  const [builtins, setBuiltins] = useState<ParamGroup[]>([])
-  const [custom, setCustom] = useState<ParamGroup[]>(loadGroups)
+  const [sets, setSets] = useState<ParamSet[] | null>(null)
+  const [builtins, setBuiltins] = useState<Array<{ strategy: StrategyKind; params: StrategyParams }>>([])
   const [selectedId, setSelectedId] = useState('builtin-n')
   const [copyName, setCopyName] = useState('')
   const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  // 自定义组的本地草稿：改参数先落这里，「保存修改」才 PUT。
+  const [draft, setDraft] = useState<Record<string, number> | null>(null)
 
-  useEffect(() => {
-    Promise.all([api.defaultParams('n'), api.defaultParams('zt')])
-      .then(([n, zt]) => {
-        setBuiltins([
-          { id: 'builtin-n', name: '内置 · 通用 N 字', strategy: 'n', params: n, builtin: true },
-          { id: 'builtin-zt', name: '内置 · 首板回调', strategy: 'zt', params: zt, builtin: true },
-        ])
-      })
-      .catch(() => setNote('内置参数加载失败，请检查后端服务。'))
-  }, [])
-
-  const persist = (groups: ParamGroup[]) => {
-    setCustom(groups)
-    localStorage.setItem(LS_KEY, JSON.stringify(groups))
+  const reload = async () => {
+    try {
+      setSets(await api.paramSets())
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : '参数组加载失败')
+      setSets([])
+    }
   }
 
-  const groups = useMemo(() => [...builtins, ...custom], [builtins, custom])
-  const selected = groups.find(g => g.id === selectedId) ?? groups[0] ?? null
+  useEffect(() => {
+    reload()
+    Promise.all([api.defaultParams('n'), api.defaultParams('zt')])
+      .then(([n, zt]) => setBuiltins([{ strategy: 'n', params: n }, { strategy: 'zt', params: zt }]))
+      .catch(() => {})
+  }, [])
+
+  const rows: Row[] = useMemo(() => {
+    const defOf = (st: StrategyKind) => sets?.some(g => g.strategy === st && g.isDefault) ?? false
+    return [
+      ...builtins.map(b => ({ id: `builtin-${b.strategy}`, name: `内置 · ${b.strategy === 'n' ? '通用 N 字' : '首板回调'}`, strategy: b.strategy, params: b.params, builtin: true, isDefault: !defOf(b.strategy) })),
+      ...(sets ?? []).map(g => ({ id: String(g.id), name: g.name, strategy: g.strategy, params: g.params, builtin: false, isDefault: g.isDefault })),
+    ]
+  }, [builtins, sets])
+
+  const selected = rows.find(r => r.id === selectedId) ?? rows[0] ?? null
   const fields = selected
     ? Object.entries(selected.params as unknown as Record<string, unknown>).filter(([, v]) => typeof v === 'number')
     : []
+  const dirty = !!selected && !selected.builtin && draft != null
 
-  const saveCopy = () => {
+  const numAt = (key: string, fallback: number) => (draft && draft[key] != null ? draft[key] : fallback)
+
+  const refresh = async (msg?: string) => {
+    setBusy(true)
+    try {
+      await reload()
+      if (msg) setNote(msg)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const saveCopy = async () => {
     if (!selected) return
     const name = copyName.trim() || `${selected.name} 副本`
-    const g: ParamGroup = {
-      id: `g-${Date.now()}`,
-      name,
-      strategy: selected.strategy,
-      params: { ...selected.params } as StrategyParams,
-      savedAt: new Date().toLocaleString('zh-CN'),
+    setBusy(true)
+    try {
+      const created = await api.saveParamSet({ name, strategy: selected.strategy, params: selected.params })
+      setCopyName('')
+      setDraft(null)
+      await reload()
+      setSelectedId(String(created.id))
+      setNote(`已保存「${name}」`)
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : '保存失败')
+    } finally {
+      setBusy(false)
     }
-    persist([...custom, g])
-    setSelectedId(g.id)
-    setCopyName('')
-    setNote(`已另存为「${name}」`)
   }
 
-  const updateField = (key: string, value: number) => {
-    if (!selected || selected.builtin) return
-    const next = custom.map(g => g.id === selected.id ? { ...g, params: { ...g.params, [key]: value } as StrategyParams } : g)
-    persist(next)
+  const saveDraft = async () => {
+    if (!selected || selected.builtin || !draft) return
+    setBusy(true)
+    try {
+      await api.updateParamSet(Number(selected.id), {
+        name: selected.name,
+        params: { ...selected.params, ...draft } as StrategyParams,
+      })
+      setDraft(null)
+      await refresh('修改已保存')
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : '保存失败')
+    } finally {
+      setBusy(false)
+    }
   }
 
-  const removeGroup = () => {
+  const markDefault = async (row: Row) => {
+    setBusy(true)
+    try {
+      if (row.builtin) {
+        await api.clearDefaultParamSet(row.strategy)
+        await refresh(`已恢复内置默认（${row.name}）`)
+      } else {
+        await api.setDefaultParamSet(Number(row.id))
+        await refresh(`「${row.name}」已设为回测默认，回测页加载即采用`)
+      }
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : '操作失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const removeGroup = async () => {
     if (!selected || selected.builtin) return
-    persist(custom.filter(g => g.id !== selected.id))
-    setSelectedId('builtin-n')
-    setNote(`已删除「${selected.name}」`)
+    setBusy(true)
+    try {
+      await api.deleteParamSet(Number(selected.id))
+      setSelectedId('builtin-n')
+      setDraft(null)
+      await refresh(`已删除「${selected.name}」`)
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : '删除失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // localStorage 旧组一次性迁移
+  const [legacy, setLegacy] = useState<Array<{ name: string; strategy: StrategyKind; params: StrategyParams }>>([])
+  useEffect(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(LS_KEY) ?? '[]')
+      if (Array.isArray(raw) && raw.length) setLegacy(raw)
+    } catch { /* ignore */ }
+  }, [])
+  const importLegacy = async () => {
+    setBusy(true)
+    try {
+      for (const g of legacy) {
+        await api.saveParamSet({ name: g.name, strategy: g.strategy, params: g.params })
+      }
+      localStorage.removeItem(LS_KEY)
+      setLegacy([])
+      await refresh(`已导入 ${legacy.length} 个本机参数组`)
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : '导入失败')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -154,23 +234,43 @@ export default function Strategy() {
         </div>
       </header>
 
+      {legacy.length > 0 && (
+        <div className="env neutral">
+          <span className="tag">迁移</span>
+          <span className="desc">检测到 {legacy.length} 个旧版本保存在本机浏览器的参数组，导入后可在所有设备使用。</span>
+          <Button variant="mini" style={{ marginLeft: 'auto' }} disabled={busy} onClick={importLegacy}>导入到数据库</Button>
+        </div>
+      )}
+
       <Card>
-        <CardHead title="参数组" sub="内置只读可另存 · 自定义可编辑删除（保存在本机浏览器）" right={note ? <span className="muted-c" style={{ fontSize: 11.5 }}>{note}</span> : undefined} />
+        <CardHead
+          title="参数组 · 回测默认"
+          sub="设为默认后，「回测分析」页加载参数即采用该组；未设置时使用内置值。内置只读可另存，自定义可编辑删除（存 PostgreSQL）。"
+          right={note ? <span className="muted-c" style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}>{note}</span> : undefined}
+        />
         <div className="table-panel" style={{ marginBottom: 14 }}>
           <div className="table-wrap">
             <table className="tb">
               <thead>
-                <tr><th>名称</th><th>策略</th><th className="num">参数项</th><th>保存时间</th><th>操作</th></tr>
+                <tr><th>名称</th><th>策略</th><th className="num">参数项</th><th>回测默认</th><th>保存时间</th><th>操作</th></tr>
               </thead>
               <tbody>
-                {groups.map(g => (
-                  <tr key={g.id} className={`rowlink${selected?.id === g.id ? ' sel' : ''}`} onClick={() => setSelectedId(g.id)}>
-                    <td><span className="code" style={{ fontFamily: 'var(--sans)' }}>{g.name}{g.builtin && <span className="badge-run" style={{ marginLeft: 8 }}>内置</span>}</span></td>
-                    <td>{g.strategy === 'n' ? '通用 N 字' : '首板回调'}</td>
-                    <td className="num">{Object.keys(g.params as object).length}</td>
-                    <td className="muted-c mono" style={{ fontSize: 11 }}>{g.savedAt ?? '—'}</td>
+                {rows.map(row => (
+                  <tr key={row.id} className={`rowlink${selected?.id === row.id ? ' sel' : ''}`} onClick={() => { setSelectedId(row.id); setDraft(null) }}>
                     <td>
-                      <Button variant="mini" onClick={e => { e.stopPropagation(); setSelectedId(g.id) }}>查看</Button>
+                      <span style={{ fontFamily: 'var(--sans)', fontWeight: 600, color: 'var(--ink)' }}>{row.name}</span>
+                      {row.builtin && <span className="badge-run" style={{ marginLeft: 8 }}>内置</span>}
+                    </td>
+                    <td>{row.strategy === 'n' ? '通用 N 字' : '首板回调'}</td>
+                    <td className="num">{Object.keys(row.params as object).length}</td>
+                    <td>{row.isDefault && <span className="badge-ok">当前默认</span>}</td>
+                    <td className="muted-c mono" style={{ fontSize: 11 }}>{row.builtin ? '—' : (sets?.find(g => String(g.id) === row.id)?.updatedAt ?? '').slice(0, 19).replace('T', ' ')}</td>
+                    <td>
+                      {row.isDefault
+                        ? (row.builtin ? <span className="muted-c" style={{ fontSize: 11 }}>未设置自定义默认</span> : (
+                            <Button variant="mini" disabled={busy} onClick={e => { e.stopPropagation(); markDefault(rows.find(r => r.builtin && r.strategy === row.strategy) ?? row) }}>恢复内置</Button>
+                          ))
+                        : <Button variant="mini" disabled={busy} onClick={e => { e.stopPropagation(); markDefault(row) }}>设为默认</Button>}
                     </td>
                   </tr>
                 ))}
@@ -185,18 +285,17 @@ export default function Strategy() {
               <div className="fbar" style={{ marginBottom: 12 }}>
                 <input
                   className="input" style={{ flex: '0 0 260px' }}
-                  placeholder={`另存为副本，如：${selected.name} 严选`
-                  }
+                  placeholder={`另存为新组，如：${selected.name} 严选`}
                   value={copyName}
                   onChange={e => setCopyName(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && saveCopy()}
-                  disabled={selected.builtin ? false : false}
                 />
-                <Button onClick={saveCopy}>另存为副本</Button>
+                <Button onClick={saveCopy} loading={busy && !dirty}>另存为新组</Button>
                 {!selected.builtin && (
                   <>
-                    <Button variant="ghost" onClick={() => setNote('自定义组修改后即时保存（输入即生效）')}>已自动保存</Button>
-                    <Button variant="mini-danger" onClick={removeGroup}>删除此组</Button>
+                    <Button variant="ghost" disabled={!dirty || busy} onClick={saveDraft}>保存修改</Button>
+                    {dirty && <Button variant="mini" onClick={() => setDraft(null)}>放弃</Button>}
+                    <Button variant="mini-danger" disabled={busy} onClick={removeGroup}>删除此组</Button>
                   </>
                 )}
               </div>
@@ -207,9 +306,9 @@ export default function Strategy() {
                     label={FIELD_LABELS[key] ?? key}
                     type="number"
                     step="any"
-                    value={String(value)}
+                    value={String(numAt(key, Number(value)))}
                     disabled={selected.builtin}
-                    onChange={e => updateField(key, Number(e.target.value))}
+                    onChange={e => setDraft(prev => ({ ...(prev ?? {}), [key]: Number(e.target.value) }))}
                   />
                 ))}
                 {'excludeOneWordBoard' in (selected.params as object) && (
@@ -220,7 +319,6 @@ export default function Strategy() {
                         type="checkbox"
                         checked={(selected.params as unknown as Record<string, unknown>).excludeOneWordBoard === true}
                         disabled={selected.builtin}
-                        onChange={e => updateField('excludeOneWordBoard', e.target.checked ? 1 : 0)}
                       />
                       {(selected.params as unknown as Record<string, unknown>).excludeOneWordBoard === true ? '排除' : '不排除'}
                     </label>
@@ -231,10 +329,11 @@ export default function Strategy() {
             <div className="stack" style={{ flex: '0 0 300px' }}>
               <Card hoverable>
                 <div className="h"><span className="dot" />使用规则</div>
-                <div className="kv"><span className="k">生效范围</span><span>回测页会读取默认参数</span></div>
+                <div className="kv"><span className="k">生效范围</span><span>设为默认 → 回测页加载即用</span></div>
                 <div className="kv"><span className="k">内置组</span><span className="ok">只读 · 可另存</span></div>
-                <div className="kv"><span className="k">自定义组</span><span className="ok">输入即保存</span></div>
-                <div className="kv"><span className="k">存储</span><span className="mono">localStorage</span></div>
+                <div className="kv"><span className="k">自定义组</span><span className="ok">改后点「保存修改」</span></div>
+                <div className="kv"><span className="k">存储</span><span className="mono">PostgreSQL</span></div>
+                <div className="kv"><span className="k">每策略默认</span><span>通用 N 字 / 首板回调 各一个</span></div>
               </Card>
               <Card hoverable>
                 <div className="h"><span className="dot" />调参建议</div>
