@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { DEFAULT_VIEW, VIEWS, viewByKey } from './views'
@@ -48,12 +48,20 @@ export const useIsActive = () => useContext(ActiveContext)
 export function Shell() {
   const { view } = useView()
   const [visited, setVisited] = useState<string[]>([view])
+  // 各视图上次可见时的视口尺寸：只有视口变过才需要广播 resize 校正图表，
+  // 平时切换零广播——避免所有已挂载图表无差别同步重排(实测 100~260ms 长任务)。
+  const lastSeenVp = useRef(new Map<string, string>())
 
   useEffect(() => {
     setVisited(vs => (vs.includes(view) ? vs : [...vs, view]))
   }, [view])
 
   useEffect(() => {
+    const vp = `${window.innerWidth}x${window.innerHeight}`
+    const prev = lastSeenVp.current.get(view)
+    lastSeenVp.current.set(view, vp)
+    if (prev === undefined || prev === vp) return
+    // 视口在该视图隐藏期间变过：等新视图完成一次绘制后再踢图表
     const id = requestAnimationFrame(() => window.dispatchEvent(new Event('resize')))
     return () => cancelAnimationFrame(id)
   }, [view])

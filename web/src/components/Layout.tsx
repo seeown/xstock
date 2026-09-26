@@ -4,8 +4,8 @@ import { useView } from '../shell'
 import { VIEWS } from '../views'
 import { ToastStack, useToasts } from './ui'
 
-// 悬浮切换的驻留阈值：划过不切，停稳才切。
-const HOVER_DWELL_MS = 250
+// 悬浮切换的驻留阈值：划过不切，停稳才切(180ms 兼顾响应与防误触)。
+const HOVER_DWELL_MS = 180
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { toasts, push, dismiss } = useToasts()

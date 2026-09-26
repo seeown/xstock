@@ -1501,8 +1501,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 /* ---- 保活壳：每个视图独立滚动容器，隐藏用 hidden 属性 ---- */
 .view { height: 100vh; overflow-y: auto; overscroll-behavior: contain; }
 .view[hidden] { display: none; }
+/* 切入过渡：仅透明度+1px 位移，合成器动画，零布局开销 */
+.view.active { animation: view-in 120ms ease; }
+@keyframes view-in {
+  from { opacity: .3; transform: translateY(2px); }
+  to { opacity: 1; transform: none; }
+}
 
 /* ---- reduced-motion ---- */
+@media (prefers-reduced-motion: reduce) {
+  .view.active { animation: none; }
 @media (prefers-reduced-motion: reduce) {
   .skel::after { animation: none; }
   .conn .dot { animation: none; }
