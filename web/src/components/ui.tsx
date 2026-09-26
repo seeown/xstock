@@ -1,94 +1,32 @@
-import type { ReactNode } from 'react'
+// ui.tsx 是组件系统统一出口（页面导入路径不变）。
+// 新组件放 components/ui/ 下，一组件一文件，在此 re-export。
+export { fmt, pct, money, exitReasonText } from './ui/format'
+export { Card, CardHead } from './ui/Card'
+export { MetricCard } from './ui/MetricCard'
+export { KpiCard } from './ui/KpiCard'
+export type { KpiTone } from './ui/KpiCard'
+export { Button } from './ui/Button'
+export type { ButtonVariant } from './ui/Button'
+export { BuyPointBadge, StatusBadge } from './ui/Badge'
+export type { StatusKind } from './ui/Badge'
+export { EnvBanner } from './ui/EnvBanner'
+export type { EnvTone } from './ui/EnvBanner'
+export { Chip, SelectPill, SearchPill, FilterBar } from './ui/Filter'
+export { TextField } from './ui/TextField'
+export { RpsBar } from './ui/RpsBar'
+export { Progress } from './ui/Progress'
+export { LogStream } from './ui/LogStream'
+export type { LogLine, LogLevel } from './ui/LogStream'
+export { useToasts, ToastStack } from './ui/Toast'
+export type { ToastItem } from './ui/Toast'
+export { ErrorBlock } from './ui/ErrorBlock'
+export { Skeleton } from './ui/Skeleton'
+export { EmptyState } from './ui/EmptyState'
+export { Spinner } from './ui/Spinner'
+export { Banner } from './ui/Banner'
+export { Sparkline } from './ui/Sparkline'
 
-export const fmt = (n: number) =>
-  Number(n).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
-
-export const pct = (n: number) => `${Number(n).toFixed(2)}%`
-
-export const money = (n: number) =>
-  `¥${Number(n).toLocaleString('zh-CN', { maximumFractionDigits: 0 })}`
-
-export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <section className={`card ${className}`}>{children}</section>
-}
-
-export function CardHead({ title, sub, right }: { title: string; sub?: string; right?: ReactNode }) {
-  return (
-    <div className="card-head">
-      <div>
-        <h2>{title}</h2>
-        {sub && <p>{sub}</p>}
-      </div>
-      {right}
-    </div>
-  )
-}
-
-export function MetricCard({
-  label,
-  value,
-  tone = 'neutral',
-  hint,
-}: {
-  label: string
-  value: string
-  tone?: 'pos' | 'neg' | 'neutral'
-  hint?: string
-}) {
-  return (
-    <div className={`metric ${tone}`}>
-      <span className="metric-label">{label}</span>
-      <strong className="metric-value">{value}</strong>
-      {hint && <span className="metric-hint">{hint}</span>}
-    </div>
-  )
-}
-
-export function Banner({ text, kind }: { text: string; kind: 'info' | 'error' | 'success' }) {
-  if (!text) return null
-  return <div className={`banner ${kind}`}>{text}</div>
-}
-
-export function Spinner({ text = '加载中…' }: { text?: string }) {
-  return (
-    <div className="spinner-wrap">
-      <span className="spinner" />
-      <span>{text}</span>
-    </div>
-  )
-}
-
+// 兼容旧 Empty 签名（纯文本空态），新页面请用 EmptyState
 export function Empty({ text }: { text: string }) {
   return <div className="empty">{text}</div>
-}
-
-// Sparkline 迷你走势线（纯 SVG polyline），情绪趋势与板块等权指数用。
-export function Sparkline({
-  values, width = 110, height = 34, color = '#9ec1ff',
-}: {
-  values: Array<number | null>
-  width?: number
-  height?: number
-  color?: string
-}) {
-  const pts = values.filter((v): v is number => v != null && Number.isFinite(v))
-  if (pts.length < 2) return <svg width={width} height={height} className="spark" />
-  const min = Math.min(...pts)
-  const max = Math.max(...pts)
-  const range = max - min || 1
-  const path = pts
-    .map((v, i) => `${(i / (pts.length - 1)) * (width - 4) + 2},${height - 3 - ((v - min) / range) * (height - 6)}`)
-    .join(' ')
-  return (
-    <svg width={width} height={height} className="spark" aria-hidden>
-      <polyline points={path} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
-      <circle cx={width - 2} cy={height - 3 - ((pts[pts.length - 1] - min) / range) * (height - 6)} r="1.8" fill={color} />
-    </svg>
-  )
-}
-
-export const exitReasonText: Record<string, string> = {
-  stop_loss: '止损',
-  take_profit: '止盈',
-  max_hold: '到期平仓',
 }
