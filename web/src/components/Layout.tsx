@@ -29,7 +29,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           <img src="/logo.png" alt="xstock" className="brand-logo" />
           <div>
             <div className="brand-name">xstock</div>
-            <div className="brand-sub">战法研究的交易魔方</div>
+            <div className="brand-sub">战法研究交易魔方</div>
           </div>
         </div>
         <nav>
