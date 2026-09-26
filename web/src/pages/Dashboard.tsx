@@ -6,9 +6,10 @@ import {
 } from '../api'
 import KlineChart from '../components/KlineChart'
 import PriceChart from '../components/PriceChart'
+import EquityCurve from '../components/EquityCurve'
 import StockProfileCard from '../components/StockProfileCard'
 import {
-  Banner, Card, CardHead, Empty, MetricCard, Spinner, exitReasonText, fmt, money, pct,
+  Banner, Button, Card, CardHead, EmptyState, Spinner, StatusBadge, exitReasonText, fmt, money, pct,
 } from '../components/ui'
 
 interface ParamField {
@@ -187,6 +188,31 @@ export default function Dashboard() {
   const m = result?.metrics
   const disabled = running
 
+  // 参数行内校验（样张库契约：错误态红描边 + 行内文案，禁跑）
+  const validate = (): Record<string, string> => {
+    const errs: Record<string, string> = {}
+    if (!params) return errs
+    const g = (k: string) => numAt(params, k)
+    for (const f of [...strategyMeta[strategy].fields, ...tradeFields]) {
+      if (g(f.key) > 0 && g(f.key) < f.min) errs[f.key] = `需 ≥ ${f.min}`
+    }
+    if (g('stopLossPct') > 0 && g('takeProfitPct') > 0 && g('stopLossPct') >= g('takeProfitPct')) {
+      errs.stopLossPct = `止损需小于止盈（${g('takeProfitPct')}）`
+    }
+    if (g('pullbackMinDays') > 0 && g('pullbackMaxDays') > 0 && g('pullbackMinDays') > g('pullbackMaxDays')) {
+      errs.pullbackMinDays = '最短回调不能大于最长回调'
+    }
+    if (g('boardVolRatioMin') > 0 && g('boardVolRatioMax') > 0 && g('boardVolRatioMin') >= g('boardVolRatioMax')) {
+      errs.boardVolRatioMin = '下限需小于上限'
+    }
+    if (g('breakoutVolRatioMin') > 0 && g('breakoutVolRatioMax') > 0 && g('breakoutVolRatioMin') >= g('breakoutVolRatioMax')) {
+      errs.breakoutVolRatioMin = '下限需小于上限'
+    }
+    return errs
+  }
+  const errors = validate()
+  const hasErrors = Object.keys(errors).length > 0
+
   const tradesList = result?.trades ?? []
   const focusTradeIdx = focus?.trade ? Math.max(0, tradesList.findIndex(t => t.buyDate === focus.trade!.buyDate)) : -1
   const stepTrade = (dir: number) => {
@@ -207,15 +233,17 @@ export default function Dashboard() {
         </div>
         <div className="symbol-bar">
           <input
+            className="input"
+            style={{ width: 130 }}
             value={symbolInput}
             onChange={e => setSymbolInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && !disabled && run(symbolInput, params, strategy)}
+            onKeyDown={e => e.key === 'Enter' && !disabled && !hasErrors && run(symbolInput, params, strategy)}
             placeholder="000021.SZ"
             spellCheck={false}
           />
-          <button className="btn primary" onClick={() => run(symbolInput, params, strategy)} disabled={disabled}>
+          <Button onClick={() => run(symbolInput, params, strategy)} disabled={disabled || hasErrors}>
             {running ? '回测中…' : '运行回测'}
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -223,16 +251,18 @@ export default function Dashboard() {
 
       <div className="dashboard-grid">
         <div className="dashboard-main">
-          <div className="metrics-row">
-            <MetricCard label="总收益" value={m ? pct(m.totalReturnPct) : '—'} tone={m && m.totalReturnPct >= 0 ? 'pos' : 'neg'} />
-            <MetricCard label="期末资金" value={m ? money(m.finalCash) : '—'} hint={m ? `初始 ${money(m.initialCash)}` : undefined} />
-            <MetricCard label="最大回撤" value={m ? pct(m.maxDrawdownPct) : '—'} tone="neg" />
-            <MetricCard label="胜率 / 交易" value={m ? `${pct(m.winRatePct)} / ${m.tradeCount}` : '—'} />
+          <div className="mcomp">
+            <div className="c">总收益<b className={m && m.totalReturnPct >= 0 ? 'up-text' : 'down-text'}>{m ? (m.totalReturnPct >= 0 ? '+' : '') + pct(m.totalReturnPct) : '—'}</b></div>
+            <div className="c">期末资金<b>{m ? money(m.finalCash) : '—'}</b>{m && <span className="mono" style={{ fontSize: 10.5 }}>初始 {money(m.initialCash)}</span>}</div>
+            <div className="c">最大回撤<b className="down-text">{m ? pct(m.maxDrawdownPct) : '—'}</b></div>
+            <div className="c">胜率<b>{m ? pct(m.winRatePct) : '—'}</b></div>
+            <div className="c">交易数<b>{m ? m.tradeCount : '—'}</b></div>
           </div>
 
           {activeSymbol !== 'DEMO' && <StockProfileCard symbol={activeSymbol} />}
 
           {bars.length > 0 && (
+            <>
             <Card>
               <CardHead
                 title={`${activeSymbol} 日K · 买卖点`}
@@ -286,6 +316,14 @@ export default function Dashboard() {
                 focus={focus ? { from: focus.from, to: focus.to } : null}
                 onMarkClick={handleMarkClick} onResetFocus={() => setFocus(null)} />
             </Card>
+
+            {m && tradesList.length > 0 && (
+              <Card>
+                <CardHead title="资金曲线" sub="策略权益（卖出日结算）· 基准虚线为初始资金 · 淡红为回撤区间" />
+                <EquityCurve initialCash={m.initialCash} trades={tradesList} />
+              </Card>
+            )}
+            </>
           )}
 
           <Card>
@@ -301,7 +339,7 @@ export default function Dashboard() {
             <CardHead title={`${strategyMeta[strategy].label}候选信号`} right={<span className="count-pill">{(result?.signals ?? []).length} 个</span>} />
             {(result?.signals ?? []).length ? (
               <div className="table-wrap">
-                <table>
+                <table className="tb">
                   <thead>
                     {strategy === 'zt' ? (
                       <tr>
@@ -318,7 +356,7 @@ export default function Dashboard() {
                   </thead>
                   <tbody>
                     {(result?.signals ?? []).map(s => (
-                      <tr key={s.date} className="row-clickable" title="点击在K线图中聚焦这个信号"
+                      <tr key={s.date} className="rowlink" title="点击在K线图中聚焦这个信号"
                           onClick={() => focusAt(s.date, s.boardDate, `${s.date} 信号`, { signal: s })}>
                         <td>{s.date}</td>
                         {strategy === 'zt' && (
@@ -330,14 +368,14 @@ export default function Dashboard() {
                           </>
                         )}
                         <td className="num">{fmt(s.breakoutPrice)}</td>
-                        {strategy === 'n' && <td className="num pos">{pct(s.risePct)}</td>}
+                        {strategy === 'n' && <td className="num up-text">+{pct(s.risePct)}</td>}
                         {strategy === 'n' && (
-                          <td className={`num ${s.dayChangePct >= 0 ? 'pos' : 'neg'}`}>{s.dayChangePct >= 0 ? '+' : ''}{pct(s.dayChangePct)}</td>
+                          <td className={`num ${s.dayChangePct >= 0 ? 'up-text' : 'down-text'}`}>{s.dayChangePct >= 0 ? '+' : ''}{pct(s.dayChangePct)}</td>
                         )}
                         {strategy === 'n' && <td className="num">{pct(s.pullbackPct)}</td>}
                         <td className="num">{fmt(s.volumeRatio)}×</td>
                         {strategy === 'zt' && (
-                          <td className={`num ${s.dayChangePct >= 0 ? 'pos' : 'neg'}`}>{s.dayChangePct >= 0 ? '+' : ''}{pct(s.dayChangePct)}</td>
+                          <td className={`num ${s.dayChangePct >= 0 ? 'up-text' : 'down-text'}`}>{s.dayChangePct >= 0 ? '+' : ''}{pct(s.dayChangePct)}</td>
                         )}
                         <td>{s.reason}</td>
                       </tr>
@@ -346,16 +384,11 @@ export default function Dashboard() {
                 </table>
               </div>
             ) : (
-              <>
-                <Empty text={`当前时间范围内未发现${strategyMeta[strategy].label}信号`} />
-                {!allHistory && (
-                  <div className="empty-action">
-                    <button className="btn ghost small" onClick={() => setAllHistory(true)}>
-                      切到全部历史查看
-                    </button>
-                  </div>
-                )}
-              </>
+              <EmptyState
+                title={`当前时间范围内未发现${strategyMeta[strategy].label}信号`}
+                desc="可能是窗口太短或参数过严。可切换全部历史回看，或在右侧放宽信号参数。"
+                actions={!allHistory && <Button variant="ghost" onClick={() => setAllHistory(true)}>切到全部历史查看</Button>}
+              />
             )}
           </Card>
 
@@ -363,7 +396,7 @@ export default function Dashboard() {
             <CardHead title="模拟交易" right={<span className="count-pill">{(result?.trades ?? []).length} 笔</span>} />
             {(result?.trades ?? []).length ? (
               <div className="table-wrap">
-                <table>
+                <table className="tb">
                   <thead>
                     <tr>
                       <th>买入日</th><th>卖出日</th><th className="num">买入价</th>
@@ -372,30 +405,30 @@ export default function Dashboard() {
                   </thead>
                   <tbody>
                     {(result?.trades ?? []).map(t => (
-                      <tr key={t.buyDate} className="row-clickable" title="点击在K线图中聚焦这笔交易"
+                      <tr key={t.buyDate} className="rowlink" title="点击在K线图中聚焦这笔交易"
                           onClick={() => focusAt(t.buyDate, t.sellDate, `${t.buyDate} 买入`, { trade: t })}>
                         <td>{t.buyDate}</td>
                         <td>{t.sellDate}</td>
                         <td className="num">{fmt(t.buyPrice)}</td>
                         <td className="num">{fmt(t.sellPrice)}</td>
-                        <td className={`num ${t.returnPct >= 0 ? 'pos' : 'neg'}`}>{pct(t.returnPct)}</td>
-                        <td>{exitReasonText[t.exitReason] ?? t.exitReason}</td>
+                        <td className={`num ${t.returnPct >= 0 ? 'up-text' : 'down-text'}`}>{t.returnPct >= 0 ? '+' : ''}{pct(t.returnPct)}</td>
+                        <td>
+                          <StatusBadge
+                            status={t.exitReason === 'take_profit' ? 'ok' : t.exitReason === 'stop_loss' ? 'fail' : 'run'}
+                            reason={exitReasonText[t.exitReason] ?? t.exitReason}
+                          />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             ) : (
-              <>
-                <Empty text="尚未产生模拟交易" />
-                {!allHistory && (
-                  <div className="empty-action">
-                    <button className="btn ghost small" onClick={() => setAllHistory(true)}>
-                      切到全部历史查看
-                    </button>
-                  </div>
-                )}
-              </>
+              <EmptyState
+                title="尚未产生模拟交易"
+                desc="信号生成但未触发买卖规则时会没有交易。可放宽止损/止盈或切到全部历史。"
+                actions={!allHistory && <Button variant="ghost" onClick={() => setAllHistory(true)}>切到全部历史查看</Button>}
+              />
             )}
           </Card>
         </div>
@@ -422,13 +455,16 @@ export default function Dashboard() {
                 <span className="param-input">
                   <input
                     type="number"
+                    className={errors[f.key] ? 'err' : ''}
                     min={f.min}
                     step={f.step ?? 1}
+                    aria-invalid={errors[f.key] ? true : undefined}
                     value={numAt(params, f.key) > 0 ? numAt(params, f.key) : ''}
                     onChange={e => setParams({ ...params, [f.key]: Number(e.target.value) } as StrategyParams)}
                   />
                   <em>{f.unit}</em>
                 </span>
+                {errors[f.key] && <span className="param-err">{errors[f.key]}</span>}
               </label>
             ))}
             {strategy === 'zt' && (
@@ -452,13 +488,16 @@ export default function Dashboard() {
                 <span className="param-input">
                   <input
                     type="number"
+                    className={errors[f.key] ? 'err' : ''}
                     min={f.min}
                     step={f.step ?? 1}
+                    aria-invalid={errors[f.key] ? true : undefined}
                     value={numAt(params, f.key) > 0 ? numAt(params, f.key) : ''}
                     onChange={e => setParams({ ...params, [f.key]: Number(e.target.value) } as StrategyParams)}
                   />
                   <em>{f.unit}</em>
                 </span>
+                {errors[f.key] && <span className="param-err">{errors[f.key]}</span>}
               </label>
             ))}
             <h3 className="group-title">回测范围</h3>
@@ -489,9 +528,15 @@ export default function Dashboard() {
                 <em>{allHistory ? '全部历史' : `近 ${Math.max(1, windowDays || 1)} 日`}</em>
               </span>
             </label>
-            <button className="btn primary block" onClick={() => run(symbolInput, params, strategy)} disabled={disabled}>
+            <Button
+              block
+              loading={running}
+              disabled={hasErrors || disabled}
+              onClick={() => run(symbolInput, params, strategy)}
+              title={hasErrors ? '参数有校验错误，修正后运行' : undefined}
+            >
               {running ? '回测中…' : '运行回测'}
-            </button>
+            </Button>
             <p className="param-hint">信号收盘后生成，按下一交易日开盘价模拟成交，规避未来函数。</p>
           </Card>
         </aside>

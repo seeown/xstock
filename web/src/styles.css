@@ -1405,6 +1405,23 @@ table.tb { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .expand-toggle:hover { color: var(--accent-soft); background: rgba(56, 189, 248, .12); }
 .skel-card { padding: 22px; }
 
+/* ---- 回测页：参数错误态 + 资金曲线 + block 按钮 ---- */
+.param-input input.err { border-color: var(--up) !important; background: rgba(255, 110, 102, .07); }
+.param-err {
+  display: block; width: 100%;
+  font-size: 11px; color: var(--up-text);
+  margin: 2px 0 4px; padding-left: 2px;
+}
+.btn2.block { width: 100%; justify-content: center; margin-top: 14px; }
+.equity-wrap { padding: 4px 2px 0; }
+.equity-axis {
+  display: flex; justify-content: space-between;
+  font-size: 10.5px; color: var(--muted);
+  padding: 6px 8px 0;
+}
+.equity-wrap .legend { padding: 10px 8px 0; }
+.equity-wrap .legend span { display: inline-flex; align-items: center; }
+
 /* ---- reduced-motion ---- */
 @media (prefers-reduced-motion: reduce) {
   .skel::after { animation: none; }
