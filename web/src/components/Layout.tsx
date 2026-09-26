@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
+import { ToastStack, useToasts } from './ui'
 
 const navItems = [
   { to: '/', label: '回测分析', no: '01', end: true },
@@ -12,6 +13,15 @@ const navItems = [
 ]
 
 export default function Layout({ children }: { children: ReactNode }) {
+  const { toasts, push, dismiss } = useToasts()
+
+  // 全局网络错误 Toast：api.ts 在后端不可达时广播（页面级错误仍由页面自处）
+  useEffect(() => {
+    const onNetErr = (e: Event) => push('连接失败', (e as CustomEvent<string>).detail)
+    window.addEventListener('xstock:neterr', onNetErr)
+    return () => window.removeEventListener('xstock:neterr', onNetErr)
+  }, [push])
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -35,6 +45,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         </div>
       </aside>
       <main className="main">{children}</main>
+      <ToastStack toasts={toasts} onClose={dismiss} />
     </div>
   )
 }

@@ -1453,6 +1453,27 @@ select.select-pill.native {
 .gauge { width: 100%; height: auto; display: block; }
 .gauge-stage { font-size: 20px; font-weight: 800; letter-spacing: .02em; }
 
+/* ---- WP3 全局：焦点环 + 组件级响应式 ---- */
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible, [tabindex]:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-pill);
+}
+
+@media (max-width: 1279px) {
+  .search-pill { width: 160px; }
+}
+
+@media (max-width: 767px) {
+  .kpis { gap: 8px; }
+  .kpi { min-width: calc(50% - 4px); }
+  .split { flex-direction: column; }
+  .gauge-wrap { flex: '0 0 auto'; width: 100%; max-width: 320px; margin: 0 auto; }
+  .expand-grid { grid-template-columns: 1fr; }
+  .search-pill { width: 100%; margin-left: 0; }
+  .field-err, .field-hint { padding-left: 0; }
+}
+
 /* ---- reduced-motion ---- */
 @media (prefers-reduced-motion: reduce) {
   .skel::after { animation: none; }

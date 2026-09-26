@@ -1,5 +1,6 @@
 import { Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
+import ErrorBoundary from './components/ErrorBoundary'
 import Dashboard from './pages/Dashboard'
 import DataManager from './pages/DataManager'
 import DevUI from './pages/DevUI'
@@ -12,7 +13,8 @@ import Strategy from './pages/Strategy'
 export default function App() {
   return (
     <Layout>
-      <Routes>
+      <ErrorBoundary>
+        <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/screen" element={<Screen />} />
         <Route path="/market" element={<Market />} />
@@ -22,7 +24,8 @@ export default function App() {
         <Route path="/strategy" element={<Strategy />} />
         {/* 开发用组件样张路由，不出现在导航 */}
         <Route path="/dev/ui" element={<DevUI />} />
-      </Routes>
+        </Routes>
+      </ErrorBoundary>
     </Layout>
   )
 }

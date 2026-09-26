@@ -8,11 +8,11 @@ export const MA_PERIODS = [5, 10, 20, 30, 60, 250]
 
 // The default theme ships only 5 indicator line colors; a 6th series (年线)
 // would render with no color at all, so supply one per MA line explicitly.
-const MA_COLORS = ['#FF9600', '#935EBD', '#4C6BF5', '#E11D74', '#01C5C4', '#F5B544']
+const MA_COLORS = ['#2DD4BF', '#A5B4FC', '#38BDF8', '#FFC46B', '#A78BFA', '#94A3B8']
 
 // A股惯例：涨红跌绿。
-const UP_COLOR = '#f4577a'
-const DOWN_COLOR = '#22c58b'
+const UP_COLOR = '#FF6E66'
+const DOWN_COLOR = '#3DDC97'
 
 // klinecharts 的 overlay 文字默认带品牌蓝实底(#1677FF)+白字，自定义样式
 // 增量合并——必须显式清零背景/边框/内边距，否则文字后面衬一块蓝底。
@@ -211,7 +211,7 @@ export default function KlineChart({
 
     chart.setStyles({
       grid: {
-        horizontal: { show: false },
+        horizontal: { show: true, color: 'rgba(255,255,255,.06)', size: 1 },
         vertical: { show: false },
       },
       candle: {

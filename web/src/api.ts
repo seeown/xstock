@@ -338,7 +338,14 @@ export interface ProfileQuery {
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init)
+  let res: Response
+  try {
+    res = await fetch(url, init)
+  } catch (err) {
+    // 网络级失败（后端不可达）：页面各自处理外，再广播给全局 Toast。
+    window.dispatchEvent(new CustomEvent('xstock:neterr', { detail: '后端服务不可达，请确认 server 已启动' }))
+    throw err instanceof Error ? err : new Error('网络错误')
+  }
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
     const msg = (data as { error?: string }).error || `请求失败 (${res.status})`
