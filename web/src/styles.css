@@ -1394,6 +1394,17 @@ table.tb { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .split .grow { flex: 1; min-width: 0; }
 .stack > * + * { margin-top: 12px; }
 
+/* ---- 候选表：键盘选中行 + 行展开开关 ---- */
+.tb tbody tr.sel td { background: rgba(56, 189, 248, .10); }
+.tb tbody tr.sel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+.expand-toggle {
+  border: none; background: none; color: var(--muted);
+  font-size: 10px; width: 18px; height: 18px; padding: 0; margin-right: 4px;
+  border-radius: 5px; cursor: pointer; vertical-align: middle;
+}
+.expand-toggle:hover { color: var(--accent-soft); background: rgba(56, 189, 248, .12); }
+.skel-card { padding: 22px; }
+
 /* ---- reduced-motion ---- */
 @media (prefers-reduced-motion: reduce) {
   .skel::after { animation: none; }
