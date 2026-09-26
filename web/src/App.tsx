@@ -1,31 +1,29 @@
-import { Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import Layout from './components/Layout'
-import ErrorBoundary from './components/ErrorBoundary'
-import Dashboard from './pages/Dashboard'
-import DataManager from './pages/DataManager'
 import DevUI from './pages/DevUI'
-import Guide from './pages/Guide'
-import Market from './pages/Market'
-import Screen from './pages/Screen'
-import Stocks from './pages/Stocks'
-import Strategy from './pages/Strategy'
+import { LegacyRedirect, Shell, ViewProvider } from './shell'
+import { VIEWS } from './views'
 
+// 单壳应用：/ 下是保活 Tab 壳(视图 = ?view=)，菜单悬浮/点击切换；
+// 旧路径(/screen 等)带全部 query 重定向进壳；/dev/ui 保持独立路由。
 export default function App() {
   return (
-    <Layout>
-      <ErrorBoundary>
-        <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/screen" element={<Screen />} />
-        <Route path="/market" element={<Market />} />
-        <Route path="/guide" element={<Guide />} />
-        <Route path="/stocks" element={<Stocks />} />
-        <Route path="/data" element={<DataManager />} />
-        <Route path="/strategy" element={<Strategy />} />
-        {/* 开发用组件样张路由，不出现在导航 */}
+    <ViewProvider>
+      <Routes>
+        <Route path="/" element={<Layout><Shell /></Layout>} />
+        {/* 开发用组件样张路由，不进壳 */}
         <Route path="/dev/ui" element={<DevUI />} />
-        </Routes>
-      </ErrorBoundary>
-    </Layout>
+        {/* 旧链接兼容：/screen?stage=b2 → /?view=screen&stage=b2 */}
+        {VIEWS.filter(v => v.path !== '/').map(v => (
+          <Route key={v.path} path={v.path} element={<LegacyRedirect viewKey={v.key} />} />
+        ))}
+        <Route path="*" element={<UnknownRedirect />} />
+      </Routes>
+    </ViewProvider>
   )
+}
+
+function UnknownRedirect() {
+  const loc = useLocation()
+  return <Navigate to={`/${loc.search}`} replace />
 }

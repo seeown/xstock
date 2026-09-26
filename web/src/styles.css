@@ -1498,6 +1498,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   .tb tr.expand td { padding: 10px 12px; }
 }
 
+/* ---- 保活壳：每个视图独立滚动容器，隐藏用 hidden 属性 ---- */
+.view { height: 100vh; overflow-y: auto; overscroll-behavior: contain; }
+.view[hidden] { display: none; }
+
 /* ---- reduced-motion ---- */
 @media (prefers-reduced-motion: reduce) {
   .skel::after { animation: none; }

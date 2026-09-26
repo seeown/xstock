@@ -4,6 +4,7 @@ import { api, type Candle, type IndexInfo, type LadderStock, type SectorRow, typ
 import KlineChart, { computeMA } from '../components/KlineChart'
 import { KlineDetailModal, KlinePopover, useKlinePreview } from '../components/klinePreview'
 import { Banner, Card, CardHead, Sparkline, fmt, pct } from '../components/ui'
+import { useIsActive } from '../shell'
 
 // 板块表可排序列（数值列，默认降序）。
 type SectorSortKey = 'limitUp' | 'avgChange' | 'count'
@@ -53,8 +54,11 @@ export default function Market() {
     return list
   }
 
-  // 情绪 + 板块：首算可能要几秒（全市场扫描），之后每分钟随快照刷新。
+  // 情绪 + 板块：首算可能要几秒（全市场扫描），之后每分钟随快照刷新；
+  // 保活壳里仅激活时轮询，重新激活立即刷一次。
+  const isActiveView = useIsActive()
   useEffect(() => {
+    if (!isActiveView) return
     let cancelled = false
     const load = () => {
       api.marketSentiment().then(r => { if (!cancelled) setSent(r) }).catch(() => {})
@@ -63,7 +67,7 @@ export default function Market() {
     load()
     const t = setInterval(load, 60_000)
     return () => { cancelled = true; clearInterval(t) }
-  }, [])
+  }, [isActiveView])
 
   const loadBars = useCallback(async (symbol: string): Promise<Candle[]> => {
     try {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api, type GuideResult } from '../api'
 import { Button, Card, CardHead, ErrorBlock, Skeleton, pct } from '../components/ui'
+import { useIsActive } from '../shell'
 
 const stageTone: Record<string, string> = {
   冰点: 'neg', 低迷: 'neg', 中性: '', 活跃: 'pos', 亢奋: 'pos',
@@ -133,7 +134,11 @@ export default function Guide() {
   const [data, setData] = useState<GuideResult | null>(null)
   const [err, setErr] = useState('')
 
+  // 保活壳里仅激活时轮询；重新激活立即刷一次(数据新鲜度)
+  const active = useIsActive()
+
   useEffect(() => {
+    if (!active) return
     let cancelled = false
     const load = () => api.marketGuide()
       .then(r => { if (!cancelled) { setData(r); setErr('') } })
@@ -141,7 +146,7 @@ export default function Guide() {
     load()
     const t = setInterval(load, 60_000)
     return () => { cancelled = true; clearInterval(t) }
-  }, [])
+  }, [active])
 
   const rt = data?.realtime
   const hist = useMemo(() => data?.history ?? [], [data])
