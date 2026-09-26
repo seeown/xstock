@@ -5,3 +5,6 @@ web/node_modules
 .env.*
 bin/
 logs/
+
+# Mimosa security-scan plugin runtime state
+.mimosa/

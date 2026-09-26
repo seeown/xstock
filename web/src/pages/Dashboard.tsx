@@ -21,7 +21,7 @@ interface ParamField {
 }
 
 const nSignalFields: ParamField[] = [
-  { key: 'riseDays', label: '上涨周期', unit: '天', min: 2 },
+  { key: 'riseDays', label: '上涨周期', unit: '天', min: 1 },
   { key: 'riseMinPct', label: '最小涨幅', unit: '%', step: 0.1, min: 0.1 },
   { key: 'pullbackMinDays', label: '最短回调', unit: '天', min: 1 },
   { key: 'pullbackMaxDays', label: '最长回调', unit: '天', min: 1 },
