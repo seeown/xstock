@@ -3,13 +3,13 @@ import { NavLink } from 'react-router-dom'
 import { ToastStack, useToasts } from './ui'
 
 const navItems = [
-  { to: '/', label: '回测分析', no: '01', end: true },
+  { to: '/guide', label: '情绪指南', no: '01' },
   { to: '/screen', label: '股票筛查', no: '02' },
   { to: '/market', label: '大盘行情', no: '03' },
   { to: '/stocks', label: '个股行情', no: '04' },
-  { to: '/data', label: '数据管理', no: '05' },
-  { to: '/guide', label: '情绪指南', no: '06' },
-  { to: '/strategy', label: '策略说明', no: '07' },
+  { to: '/', label: '回测分析', no: '05', end: true },
+  { to: '/strategy', label: '策略说明', no: '06' },
+  { to: '/data', label: '数据管理', no: '07' },
 ]
 
 export default function Layout({ children }: { children: ReactNode }) {
