@@ -7,8 +7,8 @@ export function KpiCard({ tone = 'a', icon, label, value }: { tone?: KpiTone; ic
     <div className="kpi">
       {icon && <span className={`ic ${tone}`}>{icon}</span>}
       <span>
-        <span className="l">{label}</span>
         <span className="v">{value}</span>
+        <span className="l">{label}</span>
       </span>
     </div>
   )

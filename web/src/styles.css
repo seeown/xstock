@@ -992,8 +992,9 @@ th.sorted { color: var(--blue); }
 .kpi .ic.g { background: linear-gradient(135deg, rgba(45, 212, 191, .20), rgba(20, 184, 166, .10)); color: var(--teal-soft); }
 .kpi .ic.o { background: linear-gradient(135deg, rgba(255, 196, 107, .20), rgba(232, 162, 61, .10)); color: var(--warn); }
 .kpi .ic.p { background: linear-gradient(135deg, rgba(129, 140, 248, .20), rgba(99, 102, 241, .10)); color: var(--indigo-soft); }
-.kpi .l { display: block; font-size: 12px; color: var(--muted); }
+/* 数字在上(主视觉),标签在下做说明 */
 .kpi .v { display: block; font-size: 22px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.25; }
+.kpi .l { display: block; font-size: 13px; color: var(--muted); margin-top: 1px; }
 
 /* ---- 筛选条 ---- */
 .fbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
