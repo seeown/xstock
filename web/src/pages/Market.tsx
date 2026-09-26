@@ -147,7 +147,7 @@ export default function Market() {
           <p>上证指数 · 深证成指 · 创业板指 · 科创50，附带 MA5 / MA10 均线</p>
         </div>
         {activeInfo && (
-          <button className="btn primary" onClick={() => syncIndex(activeInfo.symbol, activeInfo.name)} disabled={syncing}>
+          <button className="btn2" onClick={() => syncIndex(activeInfo.symbol, activeInfo.name)} disabled={syncing}>
             {syncing ? '同步中…' : '同步日K'}
           </button>
         )}
@@ -174,7 +174,7 @@ export default function Market() {
           <div className="metric">
             <span className="metric-label">最新收盘</span>
             <strong className="metric-value">{fmt(stats.close)}</strong>
-            <span className={`metric-hint ${stats.change >= 0 ? 'pos' : 'neg'}`}>
+            <span className={`metric-hint ${stats.change >= 0 ? 'up-text' : 'down-text'}`}>
               今日 {stats.change >= 0 ? '+' : ''}{pct(stats.change)}
             </span>
           </div>
@@ -188,7 +188,7 @@ export default function Market() {
           </div>
           <div className="metric">
             <span className="metric-label">均线状态</span>
-            <strong className={`metric-value ${stats.bullish === null ? '' : stats.bullish ? 'pos' : 'neg'}`}>
+            <strong className={`metric-value ${stats.bullish === null ? '' : stats.bullish ? 'up-text' : 'down-text'}`}>
               {stats.bullish === null ? '—' : stats.bullish ? '多头排列' : '空头排列'}
             </strong>
             <span className="metric-hint">{stats.first} ~ {stats.lastDate} · {stats.count} 根</span>
@@ -283,7 +283,7 @@ export default function Market() {
                 <div className="tier-head">
                   <b className="tier-name">{`${t.height}进${t.height + 1}`}</b>
                   <span className="muted">昨{t.total}只 → 晋{t.promoted.length}只</span>
-                  <span className={`tier-rate ${t.promoteRate >= 30 ? 'pos' : t.promoteRate < 15 ? 'neg' : ''}`}>
+                  <span className={`tier-rate ${t.promoteRate >= 30 ? 'up-text' : t.promoteRate < 15 ? 'down-text' : ''}`}>
                     {pct(t.promoteRate)}
                   </span>
                 </div>
@@ -342,7 +342,7 @@ export default function Market() {
         {sectors ? (
           <>
             <div className="table-wrap">
-              <table>
+              <table className="tb">
                 <thead>
                   <tr>
                     <th>行业</th>
@@ -360,7 +360,7 @@ export default function Market() {
                         {sectors.mainline === r.name && <span className="concept-chip board-chip">主线{sectors.mainlineStreak}日</span>}
                       </td>
                       <td className="num">{r.count}</td>
-                      <td className={`num ${r.avgChange >= 0 ? 'pos' : 'neg'}`}>{r.avgChange >= 0 ? '+' : ''}{pct(r.avgChange)}</td>
+                      <td className={`num ${r.avgChange >= 0 ? 'up-text' : 'down-text'}`}>{r.avgChange >= 0 ? '+' : ''}{pct(r.avgChange)}</td>
                       <td className="num">{r.limitUp || '—'}</td>
                       <td className="num muted">{(r.limitUpRecent ?? []).join(' / ')}</td>
                       <td><Sparkline values={r.index} width={130} /></td>
@@ -387,7 +387,7 @@ export default function Market() {
                       <tr key={r.name}>
                         <td>{r.name}</td>
                         <td className="num">{r.count}</td>
-                        <td className={`num ${r.avgChange >= 0 ? 'pos' : 'neg'}`}>{r.avgChange >= 0 ? '+' : ''}{pct(r.avgChange)}</td>
+                        <td className={`num ${r.avgChange >= 0 ? 'up-text' : 'down-text'}`}>{r.avgChange >= 0 ? '+' : ''}{pct(r.avgChange)}</td>
                         <td className="num">{r.limitUp || '—'}</td>
                         <td className="num muted">{(r.limitUpRecent ?? []).join(' / ')}</td>
                         <td><Sparkline values={r.index} width={130} /></td>
@@ -419,7 +419,7 @@ function LadderChip({ s, failed, onPick }: { s: LadderStock; failed?: boolean; o
       onClick={() => onPick({ symbol: s.symbol, name: s.name })}
     >
       {s.name || s.symbol}
-      <span className={s.changePct >= 0 ? 'pos' : 'neg'}>
+      <span className={s.changePct >= 0 ? 'up-text' : 'down-text'}>
         {s.changePct >= 0 ? '+' : ''}{s.changePct.toFixed(1)}%
       </span>
     </button>

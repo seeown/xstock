@@ -86,7 +86,7 @@ export default function DataManager() {
             </p>
           )}
         </div>
-        <button className="btn ghost" onClick={() => void refresh()}>刷新列表</button>
+        <button className="btn2-ghost" onClick={() => void refresh()}>刷新列表</button>
       </header>
 
       <Banner text={feedback.text} kind={feedback.kind} />
@@ -102,7 +102,7 @@ export default function DataManager() {
               placeholder="600519.SH / 000001.SZ"
               spellCheck={false}
             />
-            <button className="btn primary" onClick={handleSync} disabled={busy}>
+            <button className="btn2" onClick={handleSync} disabled={busy}>
               {busy ? '处理中…' : '开始同步'}
             </button>
           </div>
@@ -125,7 +125,7 @@ export default function DataManager() {
             rows={5}
             spellCheck={false}
           />
-          <button className="btn primary block" onClick={handleImport} disabled={busy}>
+          <button className="btn2 block" onClick={handleImport} disabled={busy}>
             {busy ? '处理中…' : '导入数据'}
           </button>
         </Card>
@@ -137,7 +137,7 @@ export default function DataManager() {
           <Spinner />
         ) : stocks.length ? (
           <div className="table-wrap">
-            <table>
+            <table className="tb">
               <thead>
                 <tr>
                   <th>代码</th><th className="num">K线数</th><th>开始日期</th><th>最新日期</th><th>来源</th><th />
