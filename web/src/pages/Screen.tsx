@@ -252,9 +252,9 @@ export default function Screen() {
                 {t.short}（{tabCount(t.key)}）
               </Chip>
             ))}
-            <span className="muted-c" style={{ fontSize: 11.5 }}>{meta.sub}</span>
             <SearchPill ref={searchRef} value={qParam} onChange={e => { setQParam(e.target.value || null); setPage(1); setSel(-1) }} />
           </FilterBar>
+          <p className="stage-note">{meta.sub}</p>
 
           {pageItems.length ? (
             <div className="table-panel">

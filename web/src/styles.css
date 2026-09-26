@@ -114,7 +114,7 @@ body {
   background: var(--canvas);
   background-attachment: fixed;
   color: var(--body-c);
-  font: 13px/1.6 var(--sans);
+  font: 13.5px/1.65 var(--sans);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -204,8 +204,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   border-bottom: 1px solid var(--line);
 }
 .page-head > div:first-child { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.page-head h1 { margin: 0; font-size: 16px; font-weight: 700; color: var(--ink); letter-spacing: 0.2px; }
-.page-head p { margin: 0; font-size: 12px; color: var(--muted); }
+.page-head h1 { margin: 0; font-size: 17px; font-weight: 700; color: var(--ink); letter-spacing: 0.2px; }
+.page-head p { margin: 0; font-size: 12.5px; color: var(--muted); }
 
 .symbol-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .symbol-bar input {
@@ -950,8 +950,8 @@ th.sorted { color: var(--blue); }
   box-shadow: inset 0 0 0 1px rgba(125, 211, 252, .30);
   white-space: nowrap;
 }
-.env .desc { font-size: 12.5px; }
-.env .rt { margin-left: auto; font: 11px var(--mono); color: var(--muted); white-space: nowrap; }
+.env .desc { font-size: 13px; }
+.env .rt { margin-left: auto; font: 11.5px var(--mono); color: var(--muted); white-space: nowrap; }
 .env.neutral {
   background: rgba(255, 255, 255, .04);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12);
@@ -992,13 +992,13 @@ th.sorted { color: var(--blue); }
 .kpi .ic.g { background: linear-gradient(135deg, rgba(45, 212, 191, .20), rgba(20, 184, 166, .10)); color: var(--teal-soft); }
 .kpi .ic.o { background: linear-gradient(135deg, rgba(255, 196, 107, .20), rgba(232, 162, 61, .10)); color: var(--warn); }
 .kpi .ic.p { background: linear-gradient(135deg, rgba(129, 140, 248, .20), rgba(99, 102, 241, .10)); color: var(--indigo-soft); }
-.kpi .l { display: block; font-size: 11px; color: var(--muted); }
-.kpi .v { display: block; font-size: 20px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.2; }
+.kpi .l { display: block; font-size: 12px; color: var(--muted); }
+.kpi .v { display: block; font-size: 22px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.25; }
 
 /* ---- 筛选条 ---- */
 .fbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
 .chip {
-  font-size: 12px;
+  font-size: 12.5px;
   border: 1px solid var(--card-border);
   border-radius: var(--r-pill);
   padding: 5px 14px;
@@ -1015,7 +1015,7 @@ th.sorted { color: var(--blue); }
   font-weight: 600;
 }
 .select-pill {
-  font-size: 12px;
+  font-size: 12.5px;
   border: 1px solid var(--card-border);
   border-radius: var(--r-pill);
   padding: 5px 12px;
@@ -1027,12 +1027,12 @@ th.sorted { color: var(--blue); }
 .select-pill .caret { font-size: 9px; color: var(--muted); }
 .search-pill {
   margin-left: auto;
-  font-size: 12px;
+  font-size: 12.5px;
   border: 1px solid var(--card-border);
   border-radius: var(--r-pill);
   padding: 5.5px 16px;
   color: var(--ink);
-  width: 200px;
+  width: 220px;
   background: rgba(255, 255, 255, .05);
 }
 .search-pill::placeholder { color: var(--muted); }
@@ -1190,7 +1190,7 @@ th.sorted { color: var(--blue); }
 table.tb { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .tb th {
   text-align: left;
-  font-size: 11px; font-weight: 600; letter-spacing: .05em;
+  font-size: 11.5px; font-weight: 600; letter-spacing: .05em;
   color: var(--muted);
   padding: 11px 12px;
   background: rgba(255, 255, 255, .04);
@@ -1202,6 +1202,7 @@ table.tb { width: 100%; border-collapse: collapse; font-size: 12.5px; }
   height: var(--row-h);
   border-bottom: 1px solid var(--line-soft);
   color: var(--body-c);
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -1209,7 +1210,7 @@ table.tb { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .tb tbody tr.rowlink { cursor: pointer; }
 .tb tbody tr.rowlink:hover td { background: rgba(56, 189, 248, .07); }
 .tb .num, .tb th.num { text-align: right; }
-.tb .code { font-weight: 600; color: var(--ink); font-family: var(--mono); font-size: 12.5px; }
+.tb .code { font-weight: 600; color: var(--ink); font-family: var(--mono); font-size: 13px; }
 .tb .name { margin-left: 7px; color: var(--muted); font-family: var(--sans); }
 .tb tr.invalid td { opacity: .5; }
 .tb tr.expand td { background: rgba(56, 189, 248, .05); padding: 14px 16px; height: auto; white-space: normal; }
@@ -1222,12 +1223,12 @@ table.tb { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .table-foot {
   display: flex; align-items: center; gap: 14px;
   padding: 10px 16px;
-  font-size: 11.5px; color: var(--muted);
+  font-size: 12px; color: var(--muted);
   border-top: 1px solid var(--line-soft);
 }
 .table-foot .keys { margin-left: auto; display: flex; gap: 12px; }
 .table-foot kbd {
-  font: 10.5px var(--mono);
+  font: 11px var(--mono);
   color: var(--body-c);
   background: rgba(255, 255, 255, .06);
   border: 1px solid var(--card-border);
@@ -1469,6 +1470,15 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 筛选条下方的阶段说明：独立成行，完整可读，不与控件抢空间 */
+.stage-note {
+  margin: -4px 2px 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+  max-width: 96ch;
 }
 
 @media (max-width: 1279px) {
