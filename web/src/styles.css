@@ -1447,6 +1447,12 @@ select.select-pill.native {
   box-shadow: 0 0 8px rgba(56, 189, 248, .5);
 }
 
+/* ---- 情绪指南：温度计头卡 ---- */
+.gauge-card { padding: 18px 22px; }
+.gauge-wrap { flex: 0 0 320px; min-width: 280px; }
+.gauge { width: 100%; height: auto; display: block; }
+.gauge-stage { font-size: 20px; font-weight: 800; letter-spacing: .02em; }
+
 /* ---- reduced-motion ---- */
 @media (prefers-reduced-motion: reduce) {
   .skel::after { animation: none; }

@@ -1,18 +1,71 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api, type GuideResult } from '../api'
-import { Card, CardHead, Spinner, pct } from '../components/ui'
+import { Button, Card, CardHead, ErrorBlock, Skeleton, pct } from '../components/ui'
 
 const stageTone: Record<string, string> = {
   冰点: 'neg', 低迷: 'neg', 中性: '', 活跃: 'pos', 亢奋: 'pos',
 }
 
+// 五档色带（与设计稿 07 一致）：冰点青绿 → 亢奋红
+const BANDS = [
+  { max: 20, name: '冰点', color: '#3DDC97' },
+  { max: 40, name: '低迷', color: '#2DD4BF' },
+  { max: 60, name: '中性', color: '#38BDF8' },
+  { max: 80, name: '活跃', color: '#FFC46B' },
+  { max: 100, name: '亢奋', color: '#FF6E66' },
+]
+const bandOf = (score: number) => BANDS.find(b => score < b.max) ?? BANDS[BANDS.length - 1]
+
+// 情绪温度计：半圆五档色带 + 白色指针 + 大字读数（设计稿 07 SVG 契约）
+function Gauge({ score, stage }: { score: number; stage: string }) {
+  const band = bandOf(score)
+  const clamped = Math.max(0, Math.min(100, score))
+  const cx = 200, cy = 190, r = 150
+  const seg = 36 // 每档 36°
+  const arc = (startDeg: number, endDeg: number, color: string, opacity = 1) => {
+    const rad = (d: number) => ((d - 90) * Math.PI) / 180
+    const x1 = cx + r * Math.cos(rad(startDeg)), y1 = cy + r * Math.sin(rad(startDeg))
+    const x2 = cx + r * Math.cos(rad(endDeg)), y2 = cy + r * Math.sin(rad(endDeg))
+    return <path d={`M${x1.toFixed(1)},${y1.toFixed(1)} A${r},${r} 0 0 1 ${x2.toFixed(1)},${y2.toFixed(1)}`} stroke={color} strokeWidth="16" fill="none" strokeLinecap="butt" opacity={opacity} />
+  }
+  const angle = -90 + (clamped / 100) * 180
+  const needleRad = (angle * Math.PI) / 180
+  const nx = cx + (r - 26) * Math.cos(needleRad), ny = cy + (r - 26) * Math.sin(needleRad)
+  return (
+    <svg viewBox="0 0 400 215" className="gauge" role="img" aria-label={`大盘情绪温度 ${clamped.toFixed(0)} 分，${stage}`}>
+      {BANDS.map((b, i) => arc(-90 + i * seg, -90 + (i + 1) * seg, b.color, band === b ? 1 : 0.32))}
+      {[20, 40, 60, 80].map(v => {
+        const rad = ((-90 + (v / 100) * 180) * Math.PI) / 180
+        return (
+          <line
+            key={v} x1={cx + (r - 10) * Math.cos(rad)} y1={cy + (r - 10) * Math.sin(rad)}
+            x2={cx + (r + 10) * Math.cos(rad)} y2={cy + (r + 10) * Math.sin(rad)}
+            stroke="rgba(255,255,255,.35)" strokeWidth="1.4"
+          />
+        )
+      })}
+      <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#F1F7FD" strokeWidth="5" strokeLinecap="round" />
+      <circle cx={cx} cy={cy} r="7" fill="#F1F7FD" />
+      <circle cx={cx} cy={cy} r="3" fill={band.color} />
+      <text x={cx} y={cy - 52} textAnchor="middle" fontSize="60" fontWeight="800" fill="#F1F7FD" style={{ fontVariantNumeric: 'tabular-nums' }}>
+        {clamped.toFixed(0)}
+      </text>
+      <text x={cx} y={cy - 22} textAnchor="middle" fontSize="15" fontWeight="700" fill={band.color}>{stage}</text>
+      <text x={cx - r} y={cy + 22} textAnchor="middle" fontSize="11" fill="#7E96B5">0</text>
+      <text x={cx + r} y={cy + 22} textAnchor="middle" fontSize="11" fill="#7E96B5">100</text>
+    </svg>
+  )
+}
+
 // 双轴折线图：左轴家数、右轴成交额（亿）。纯 SVG。
+// bands：左轴横向五档色带背景（温度走势图用，7% 透明度）。
 function LineChart({
-  labels, series, height = 220,
+  labels, series, height = 220, bands,
 }: {
   labels: string[]
   series: Array<{ name: string; color: string; data: number[]; axis: 'left' | 'right' }>
   height?: number
+  bands?: Array<{ from: number; to: number; color: string }>
 }) {
   const W = 960, H = height
   const M = { top: 16, right: 64, bottom: 26, left: 52 }
@@ -44,20 +97,27 @@ function LineChart({
         ))}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="linechart" role="img">
+        {bands?.map((b, i) => (
+          <rect
+            key={i} x={M.left} width={iw}
+            y={yL(Math.min(b.to, ls.max))} height={Math.max(0, yL(Math.max(b.from, ls.min)) - yL(Math.min(b.to, ls.max)))}
+            fill={b.color} opacity="0.07"
+          />
+        ))}
         {[0, 0.25, 0.5, 0.75, 1].map(f => (
           <g key={f}>
-            <line x1={M.left} x2={W - M.right} y1={M.top + ih * f} y2={M.top + ih * f} stroke="rgba(126,152,191,0.14)" />
-            <text x={M.left - 8} y={M.top + ih * f + 4} textAnchor="end" fontSize="11" fill="#64748b">{fmtNum(ls.max - (ls.max - ls.min) * f)}</text>
-            <text x={W - M.right + 8} y={M.top + ih * f + 4} fontSize="11" fill="#64748b">{fmtNum(rs.max - (rs.max - rs.min) * f)}</text>
+            <line x1={M.left} x2={W - M.right} y1={M.top + ih * f} y2={M.top + ih * f} stroke="rgba(255,255,255,.06)" />
+            <text x={M.left - 8} y={M.top + ih * f + 4} textAnchor="end" fontSize="11" fill="#7E96B5">{fmtNum(ls.max - (ls.max - ls.min) * f)}</text>
+            <text x={W - M.right + 8} y={M.top + ih * f + 4} fontSize="11" fill="#7E96B5">{fmtNum(rs.max - (rs.max - rs.min) * f)}</text>
           </g>
         ))}
         {labels.map((d, i) => (i % Math.ceil(n / 8) === 0 || i === n - 1) && (
-          <text key={d} x={x(i)} y={H - 8} textAnchor="middle" fontSize="11" fill="#64748b">{d.slice(5)}</text>
+          <text key={d} x={x(i)} y={H - 8} textAnchor="middle" fontSize="11" fill="#7E96B5">{d.slice(5)}</text>
         ))}
         {series.map(s => {
           const y = s.axis === 'left' ? yL : yR
           const path = s.data.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(Number.isFinite(v) ? v : s.axis === 'left' ? ls.min : rs.min).toFixed(1)}`).join(' ')
-          return <polyline key={s.name} points={path.replace(/M|L/g, '').split(' ').filter(Boolean).map((p, i) => `${i === 0 ? '' : ''}${p}`).join(' ')} fill="none" stroke={s.color} strokeWidth="1.8" strokeLinejoin="round" />
+          return <path key={s.name} d={path} fill="none" stroke={s.color} strokeWidth="1.8" strokeLinejoin="round" />
         })}
         {series.map(s => {
           const y = s.axis === 'left' ? yL : yR
@@ -88,9 +148,16 @@ export default function Guide() {
   const upDown = rt ? `${rt.upCount}:${rt.downCount}` : '—'
 
   if (err) return (
-    <div className="page"><Card><CardHead title="情绪指南" sub={err} /></Card></div>
+    <div className="page"><ErrorBlock title="情绪数据加载失败" desc={err} onRetry={() => location.reload()} /></div>
   )
-  if (!rt) return <div className="page"><Spinner text="正在计算市场情绪（首算需要几秒）…" /></div>
+  if (!rt) return (
+    <div className="page">
+      <div className="kpis">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="kpi" style={{ minHeight: 86 }}><Skeleton h={40} w="70%" /></div>)}</div>
+      <Card><Skeleton h={180} count={2} /></Card>
+    </div>
+  )
+
+  const band = bandOf(rt.tempScore)
 
   return (
     <div className="page">
@@ -101,12 +168,36 @@ export default function Guide() {
         </div>
       </header>
 
-      <div className="guide-tiles">
-        <div className="gt-tile">
-          <span>温度分 · {rt.quadrant}</span>
-          <b className={stageTone[rt.stage] ?? ''}>{rt.tempScore.toFixed(0)}<i className="gt-stage">{rt.stage}</i></b>
-          <em>冰点&lt;20 · 中性40~60 · 亢奋≥80</em>
+      {/* 温度计 + 结论：设计稿 07 头部 */}
+      <Card className="gauge-card">
+        <div className="split">
+          <div className="gauge-wrap">
+            <Gauge score={rt.tempScore} stage={rt.stage} />
+          </div>
+          <div className="grow stack">
+            <div>
+              <div className="gauge-stage" style={{ color: band.color }}>{rt.quadrant} · {rt.stage}</div>
+              <p className="muted-c" style={{ margin: '6px 0 0', fontSize: 12.5 }}>
+                温度 {rt.tempScore.toFixed(0)} / 100 · 五档：冰点&lt;20 · 低迷&lt;40 · 中性&lt;60 · 活跃&lt;80 · 亢奋≥80
+              </p>
+            </div>
+            <div className="kv"><span className="k">涨停 / 跌停</span><span className="up-text">{rt.limitUp}</span> / <span className="down-text">{rt.limitDown}</span></div>
+            <div className="kv"><span className="k">炸板率</span><span>{pct(rt.breakRate)}</span></div>
+            <div className="kv"><span className="k">晋级率</span><span>{pct(rt.promoteRate)}</span></div>
+            <div className="kv"><span className="k">两市成交额</span><span className="mono">{rt.amountToday.toFixed(0)} 亿{rt.final ? '' : `（昨日全天 ${rt.amountYesterday.toFixed(0)} 亿）`}</span></div>
+            <div className="kv"><span className="k">量能比</span><span className="mono">{rt.amountRatio.toFixed(2)}×{rt.final ? ' 对前5日均' : ' 对昨日(盘中部分)'}</span></div>
+          </div>
+          <div className="grow stack">
+            <div className="kv"><span className="k">涨跌家数</span><span>{upDown}{rt.upCount + rt.downCount > 0 ? ` · 比 ${(rt.upCount / Math.max(1, rt.downCount)).toFixed(2)}` : ''}</span></div>
+            <div className="kv"><span className="k">最高板</span><span className="mono">{rt.maxBoards || '—'} 板</span></div>
+            <div className="kv"><span className="k">快照时间</span><span className="mono">{rt.updatedAt}</span></div>
+            <div className="kv"><span className="k">口径</span><span>{rt.final ? '收盘定格' : '盘中实时'}</span></div>
+            <Button variant="ghost" onClick={() => location.reload()} style={{ marginTop: 4 }}>立即刷新</Button>
+          </div>
         </div>
+      </Card>
+
+      <div className="guide-tiles">
         {([
             ['涨停家数', String(rt.limitUp), `炸板 ${rt.broke}`],
             ['跌停家数', String(rt.limitDown), ''],
@@ -133,26 +224,27 @@ export default function Guide() {
         <LineChart
           labels={hist.map(d => d.date)}
           series={[
-            { name: '涨停', color: '#f4577a', axis: 'left', data: hist.map(d => d.limitUp) },
-            { name: '炸板', color: '#f5b544', axis: 'left', data: hist.map(d => d.broke) },
-            { name: '跌停', color: '#22c58b', axis: 'left', data: hist.map(d => d.limitDown) },
-            { name: '成交额(亿)', color: '#4f8cff', axis: 'right', data: hist.map(d => d.amount) },
+            { name: '涨停', color: '#FF6E66', axis: 'left', data: hist.map(d => d.limitUp) },
+            { name: '炸板', color: '#FFC46B', axis: 'left', data: hist.map(d => d.broke) },
+            { name: '跌停', color: '#3DDC97', axis: 'left', data: hist.map(d => d.limitDown) },
+            { name: '成交额(亿)', color: '#38BDF8', axis: 'right', data: hist.map(d => d.amount) },
           ]}
         />
       </Card>
 
       <Card>
-        <CardHead title="情绪温度分（近30个交易日）" sub="涨停30% + 炸板率20% + 晋级率20% + 量能15% + 高度15 · 冰点<20 低迷<40 中性<60 活跃<80 亢奋≥80" />
+        <CardHead title="情绪温度分（近30个交易日）" sub="涨停30% + 炸板率20% + 晋级率20% + 量能15% + 高度15 · 背景为五档色带" />
         <LineChart
           height={180}
           labels={hist.map(d => d.date)}
+          bands={BANDS.map((b, i) => ({ from: BANDS[i - 1]?.max ?? 0, to: b.max, color: b.color }))}
           series={[
-            { name: '温度分', color: '#9ec1ff', axis: 'left', data: hist.map(d => d.tempScore) },
-            { name: '涨跌家数比', color: '#7ce3bb', axis: 'right', data: hist.map(d => d.upCount / Math.max(1, d.downCount)) },
+            { name: '温度分', color: '#7DD3FC', axis: 'left', data: hist.map(d => d.tempScore) },
+            { name: '涨跌家数比', color: '#5EEAD4', axis: 'right', data: hist.map(d => d.upCount / Math.max(1, d.downCount)) },
           ]}
         />
         <div className="table-wrap">
-          <table className="guide-table">
+          <table className="tb guide-table">
             <thead>
               <tr>
                 <th>日期</th><th className="num">涨停</th><th className="num">跌停</th><th className="num">炸板率</th>
@@ -163,12 +255,12 @@ export default function Guide() {
               {[...hist].reverse().map(d => (
                 <tr key={d.date}>
                   <td>{d.date}</td>
-                  <td className="num pos">{d.limitUp}</td>
-                  <td className="num neg">{d.limitDown}</td>
+                  <td className="num up-text">{d.limitUp}</td>
+                  <td className="num down-text">{d.limitDown}</td>
                   <td className="num">{pct(d.breakRate)}</td>
                   <td className="num">{d.amount.toFixed(0)}</td>
-                  <td className={`num ${d.amountRatio >= 1.1 ? 'pos' : d.amountRatio <= 0.85 ? 'neg' : ''}`}>{d.amountRatio.toFixed(2)}×</td>
-                  <td className="num muted">{d.upCount}/{d.downCount}</td>
+                  <td className={`num ${d.amountRatio >= 1.1 ? 'up-text' : d.amountRatio <= 0.85 ? 'down-text' : ''}`}>{d.amountRatio.toFixed(2)}×</td>
+                  <td className="num muted-c">{d.upCount}/{d.downCount}</td>
                   <td className="num">{d.tempScore.toFixed(0)}</td>
                   <td><span className={`stage-chip ${stageTone[d.stage] ?? ''}`}>{d.stage}</span></td>
                 </tr>
