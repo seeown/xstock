@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, type Candle, type IndexInfo, type LadderStock, type SectorRow, type SentimentResult, type SectorsResult } from '../api'
+import { api, type Candle, type IndexInfo, type IndexMinute, type LadderStock, type SectorRow, type SentimentResult, type SectorsResult } from '../api'
+import IntradayChart from '../components/IntradayChart'
 import KlineChart, { computeMA } from '../components/KlineChart'
 import { KlineDetailModal, KlinePopover, useKlinePreview } from '../components/klinePreview'
 import { Banner, Card, CardHead, Sparkline, fmt, pct } from '../components/ui'
@@ -18,6 +19,19 @@ const ranges: Array<{ key: RangeKey; label: string; days: number }> = [
   { key: 'all', label: '全部', days: Number.MAX_SAFE_INTEGER },
 ]
 
+// K线周期：分时走独立的分时图组件；日K读本地库；周/月/年K由 TDX 实时拉取。
+type KfKey = 'min' | 'day' | 'week' | 'month' | 'year'
+
+const kfPeriods: Array<{ key: KfKey; label: string }> = [
+  { key: 'min', label: '分时' },
+  { key: 'day', label: '日K' },
+  { key: 'week', label: '周K' },
+  { key: 'month', label: '月K' },
+  { key: 'year', label: '年K' },
+]
+
+const kfLabel = (k: KfKey) => kfPeriods.find(p => p.key === k)?.label ?? k
+
 export default function Market() {
   const [indices, setIndices] = useState<IndexInfo[]>([])
   const [active, setActive] = useState('')
@@ -30,6 +44,10 @@ export default function Market() {
   const [sectors, setSectors] = useState<SectorsResult | null>(null)
   const [sortKey, setSortKey] = useState<SectorSortKey>('limitUp')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [kf, setKf] = useState<KfKey>('day')
+  const [periodBars, setPeriodBars] = useState<Record<string, Candle[]>>({})
+  const [periodLoading, setPeriodLoading] = useState(false)
+  const [intraday, setIntraday] = useState<Record<string, IndexMinute>>({})
 
   // 梯队选手 chip 点击弹出该票K线（共享预览组件）
   const navigate = useNavigate()
@@ -68,6 +86,39 @@ export default function Market() {
     const t = setInterval(load, 60_000)
     return () => { cancelled = true; clearInterval(t) }
   }, [isActiveView])
+
+  // 周/月/年K 与分时按需拉取（TDX 实时 + 服务端短缓存），按 指数|周期 记忆。
+  const loadPeriod = useCallback(async (symbol: string, kind: Exclude<KfKey, 'day'>) => {
+    setPeriodLoading(true)
+    try {
+      if (kind === 'min') {
+        const r = await api.indexIntraday(symbol)
+        setIntraday(prev => ({ ...prev, [symbol]: r }))
+      } else {
+        const bars = await api.indexPeriodBars(symbol, kind)
+        setPeriodBars(prev => ({ ...prev, [`${symbol}|${kind}`]: bars }))
+      }
+    } catch (e) {
+      setFeedback({ text: `${kfLabel(kind)} 拉取失败：${e instanceof Error ? e.message : '未知错误'}`, kind: 'error' })
+    } finally {
+      setPeriodLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!active || kf === 'day') return
+    const hit = kf === 'min' ? intraday[active] : periodBars[`${active}|${kf}`]
+    if (!hit) void loadPeriod(active, kf)
+  }, [active, kf, intraday, periodBars, loadPeriod])
+
+  // 分时随情绪轮询同频刷新（仅激活视图且停留在分时周期时）。
+  useEffect(() => {
+    if (!isActiveView || kf !== 'min' || !active) return
+    const t = window.setInterval(() => {
+      api.indexIntraday(active).then(r => setIntraday(prev => ({ ...prev, [active]: r }))).catch(() => {})
+    }, 60_000)
+    return () => window.clearInterval(t)
+  }, [isActiveView, kf, active])
 
   const loadBars = useCallback(async (symbol: string): Promise<Candle[]> => {
     try {
@@ -148,7 +199,7 @@ export default function Market() {
       <header className="page-head">
         <div>
           <h1>大盘行情</h1>
-          <p>上证指数 · 深证成指 · 创业板指 · 科创50，附带 MA5 / MA10 均线</p>
+          <p>上证指数 · 深证成指 · 创业板指 · 科创50 · 分时 / 日K / 周K / 月K / 年K，均线随周期计算</p>
         </div>
         {activeInfo && (
           <button className="btn2" onClick={() => syncIndex(activeInfo.symbol, activeInfo.name)} disabled={syncing}>
@@ -202,19 +253,48 @@ export default function Market() {
 
       <Card>
         <CardHead
-          title={activeInfo ? `${activeInfo.name} 日K` : '日K'}
-          sub="MA5/10/20/30/60/年线(250) + 成交量，支持滚轮缩放与拖动"
+          title={activeInfo ? `${activeInfo.name} ${kfLabel(kf)}` : kfLabel(kf)}
+          sub={
+            kf === 'min'
+              ? '当日分时 · 白线最新价 / 黄线当日均价 · 昨收居中基准 · 可叠加分钟均线'
+              : kf === 'day'
+                ? 'MA5/10/20/30/60/年线(250) + 成交量，支持滚轮缩放与拖动'
+                : `TDX 原生${kfLabel(kf)} · 均线随周期计算（MA5 = 5${kf === 'week' ? '周' : kf === 'month' ? '月' : '年'}线）+ 成交量`
+          }
           right={
-            <div className="range-tabs">
-              {ranges.map(r => (
-                <button key={r.key} className={`range-tab${range === r.key ? ' active' : ''}`} onClick={() => setRange(r.key)}>
-                  {r.label}
-                </button>
-              ))}
+            <div className="head-tabs">
+              <div className="range-tabs">
+                {kfPeriods.map(p => (
+                  <button key={p.key} className={`range-tab${kf === p.key ? ' active' : ''}`} onClick={() => setKf(p.key)}>
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              {kf === 'day' && (
+                <div className="range-tabs">
+                  {ranges.map(r => (
+                    <button key={r.key} className={`range-tab${range === r.key ? ' active' : ''}`} onClick={() => setRange(r.key)}>
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           }
         />
-        {loading ? <div className="chart-empty">正在加载K线…</div> : <KlineChart bars={bars} />}
+        {kf === 'min' ? (
+          intraday[active] ? (
+            <IntradayChart data={intraday[active]} />
+          ) : (
+            <div className="chart-empty">{periodLoading ? '正在拉取分时数据…' : '暂无分时数据'}</div>
+          )
+        ) : kf === 'day' ? (
+          loading ? <div className="chart-empty">正在加载K线…</div> : <KlineChart bars={bars} />
+        ) : periodBars[`${active}|${kf}`] ? (
+          <KlineChart bars={periodBars[`${active}|${kf}`]} />
+        ) : (
+          <div className="chart-empty">{periodLoading ? `正在拉取${kfLabel(kf)}数据…` : '暂无数据'}</div>
+        )}
       </Card>
 
       {/* ---- 市场情绪：实时口径 + 30 日趋势 ---- */}

@@ -39,13 +39,24 @@ func IndexOf(symbol string) (IndexDef, bool) {
 // FetchDailyIndex downloads the full unadjusted daily history for a market
 // index. Indices have no ex-dividend events, so no QFQ adjustment is needed.
 func (c *Client) FetchDailyIndex(def IndexDef) ([]market.Candle, error) {
+	return c.fetchIndexBars(def, types.KLINE_TYPE_DAILY, 20)
+}
+
+// FetchIndexBars downloads the full unadjusted history of an index at a
+// coarser TDX kline period (weekly / monthly / yearly). Unlike the daily
+// series these are served live off TDX with a short-lived cache in the API
+// layer; the bar date is the period's last trading day (TDX convention).
+func (c *Client) FetchIndexBars(def IndexDef, category uint16) ([]market.Candle, error) {
+	return c.fetchIndexBars(def, category, 600)
+}
+
+func (c *Client) fetchIndexBars(def IndexDef, category uint16, page uint16) ([]market.Candle, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	var all []proto.IndexBar
-	page := uint16(20)
 	for start := uint16(0); ; start += page {
-		reply, err := c.client.GetIndexBars(types.KLINE_TYPE_DAILY, def.Market, def.Code, start, page)
+		reply, err := c.client.GetIndexBars(category, def.Market, def.Code, start, page)
 		if err != nil {
 			return nil, fmt.Errorf("通达信指数K线拉取失败: %w", err)
 		}

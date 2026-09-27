@@ -11,7 +11,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/bensema/gotdx/types"
 
 	"xstock/internal/config"
 	"xstock/internal/market"
@@ -31,6 +34,35 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func errorJSON(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+// liveFetch caches short-lived TDX round trips (weekly/monthly/yearly index
+// bars, the day's minute series) so period flipping doesn't re-hit servers.
+type liveEntry struct {
+	at    time.Time
+	value any
+}
+
+var (
+	liveMu    sync.Mutex
+	liveStore = map[string]liveEntry{}
+)
+
+func liveFetch(key string, ttl time.Duration, fetch func() (any, error)) (any, error) {
+	liveMu.Lock()
+	if e, ok := liveStore[key]; ok && time.Since(e.at) < ttl {
+		liveMu.Unlock()
+		return e.value, nil
+	}
+	liveMu.Unlock()
+	v, err := fetch()
+	if err != nil {
+		return nil, err
+	}
+	liveMu.Lock()
+	liveStore[key] = liveEntry{at: time.Now(), value: v}
+	liveMu.Unlock()
+	return v, nil
 }
 
 func normalizeBars(bars []market.Candle) []market.Candle {
@@ -293,6 +325,58 @@ func main() {
 			out = append(out, v)
 		}
 		writeJSON(w, 200, out)
+	})
+
+	// GET /api/market/index-period?symbol=000001.SH&period=week|month|year —
+	// TDX-native weekly/monthly/yearly index bars, live with a 10min cache.
+	mux.HandleFunc("GET /api/market/index-period", func(w http.ResponseWriter, r *http.Request) {
+		symbol := strings.ToUpper(r.URL.Query().Get("symbol"))
+		def, ok := tdx.IndexOf(symbol)
+		if !ok {
+			errorJSON(w, 400, "未知指数: "+symbol)
+			return
+		}
+		period := r.URL.Query().Get("period")
+		var category uint16
+		switch period {
+		case "week":
+			category = types.KLINE_TYPE_WEEKLY
+		case "month":
+			category = types.KLINE_TYPE_MONTHLY
+		case "year":
+			category = types.KLINE_TYPE_YEARLY
+		default:
+			errorJSON(w, 400, "period 仅支持 week/month/year")
+			return
+		}
+		v, err := liveFetch("idxbars:"+symbol+":"+period, 10*time.Minute, func() (any, error) {
+			return source.FetchIndexBars(def, category)
+		})
+		if err != nil {
+			errorJSON(w, 502, err.Error())
+			return
+		}
+		writeJSON(w, 200, v)
+	})
+
+	// GET /api/market/intraday?symbol=000001.SH — the latest session's minute
+	// time-sharing series (price + running average + per-minute volume) plus
+	// the previous close used as the baseline. Refreshed at most every 45s.
+	mux.HandleFunc("GET /api/market/intraday", func(w http.ResponseWriter, r *http.Request) {
+		symbol := strings.ToUpper(r.URL.Query().Get("symbol"))
+		def, ok := tdx.IndexOf(symbol)
+		if !ok {
+			errorJSON(w, 400, "未知指数: "+symbol)
+			return
+		}
+		v, err := liveFetch("idxmin:"+symbol, 45*time.Second, func() (any, error) {
+			return source.FetchIndexMinute(def)
+		})
+		if err != nil {
+			errorJSON(w, 502, err.Error())
+			return
+		}
+		writeJSON(w, 200, v)
 	})
 
 	mux.HandleFunc("POST /api/bars/{symbol}", func(w http.ResponseWriter, r *http.Request) {
