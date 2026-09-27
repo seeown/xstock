@@ -2,7 +2,10 @@ package tdx
 
 import (
 	"fmt"
+	"strings"
 	"time"
+
+	"github.com/bensema/gotdx/types"
 )
 
 // IndexMinutePoint is one slot of an index's intraday time-sharing chart.
@@ -48,6 +51,61 @@ func (c *Client) FetchIndexMinute(def IndexDef) (*IndexMinute, error) {
 	// 昨收取自指数快照；快照失败时退化为分时首价（基准线退化为开盘）。
 	if info, ierr := c.client.GetIndexInfo(def.Market, def.Code); ierr == nil && info != nil && info.PreClose > 0 {
 		out.PreClose = info.PreClose
+	}
+	if out.PreClose == 0 {
+		out.PreClose = reply.List[0].Price
+	}
+	out.Date = sessionDate(time.Now())
+
+	n := len(reply.List)
+	if n > minuteSlots {
+		n = minuteSlots
+	}
+	for i := 0; i < n; i++ {
+		p := reply.List[i]
+		out.Points = append(out.Points, IndexMinutePoint{
+			Time:  minuteSlotTime(i),
+			Price: p.Price,
+			Avg:   p.Avg,
+			Vol:   p.Vol,
+		})
+	}
+	return out, nil
+}
+
+// FetchMinute pulls the latest session's minute series for any SH/SZ symbol
+// (stock or watchlist index) — TDX answers the same protocol call for both.
+// The previous close comes from a one-symbol quote snapshot taken inside the
+// same lock (FetchQuotes re-locks, so it must not be nested).
+func (c *Client) FetchMinute(symbol string) (*IndexMinute, error) {
+	if def, ok := IndexOf(strings.ToUpper(symbol)); ok {
+		return c.FetchIndexMinute(def)
+	}
+	mkt, code, err := types.DetectMarket(strings.ToUpper(symbol))
+	if err != nil || (mkt != types.MarketSH && mkt != types.MarketSZ && mkt != types.MarketBJ) {
+		return nil, fmt.Errorf("仅支持沪深代码，例如 600519.SH")
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	reply, err := c.client.GetMinuteTimeData(mkt.Uint8(), code)
+	if err != nil {
+		if _, cerr := c.client.Connect(); cerr != nil {
+			return nil, fmt.Errorf("通达信连接失败: %w", cerr)
+		}
+		reply, err = c.client.GetMinuteTimeData(mkt.Uint8(), code)
+		if err != nil {
+			return nil, fmt.Errorf("通达信分时拉取失败: %w", err)
+		}
+	}
+	if len(reply.List) == 0 {
+		return nil, fmt.Errorf("未获取到 %s 的分时数据（可能停牌）", symbol)
+	}
+
+	out := &IndexMinute{Points: make([]IndexMinutePoint, 0, len(reply.List))}
+	if qs, qerr := c.client.GetSecurityQuotes([]uint8{mkt.Uint8()}, []string{code}); qerr == nil && len(qs.List) > 0 && qs.List[0].PreClose > 0 {
+		out.PreClose = qs.List[0].PreClose
 	}
 	if out.PreClose == 0 {
 		out.PreClose = reply.List[0].Price

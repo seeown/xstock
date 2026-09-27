@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Candle, NPSetup } from '../api'
+import type { Candle, IndexMinute, NPSetup } from '../api'
 import { api } from '../api'
+import IntradayChart from './IntradayChart'
 import MiniKline, { setupWindow } from './MiniKline'
 import { CardHead, Spinner, fmt, pct } from './ui'
 
@@ -164,33 +165,104 @@ function basicFacts(bars: Candle[]): Array<[string, string]> {
   ]
 }
 
+// 详情弹窗的K线周期：日K读会话级缓存的日线（带形态标注），其余周期按需拉。
+type KfKey = 'min' | 'day' | 'week' | 'month' | 'year'
+
+const kfPeriods: Array<{ key: KfKey; label: string }> = [
+  { key: 'min', label: '分时' },
+  { key: 'day', label: '日K' },
+  { key: 'week', label: '周K' },
+  { key: 'month', label: '月K' },
+  { key: 'year', label: '年K' },
+]
+
 export function KlineDetailModal({ state, onClose, onOpenBacktest }: {
   state: KlineDetailState | null
   onClose: () => void
   onOpenBacktest: (symbol: string) => void
 }) {
+  const [kf, setKf] = useState<KfKey>('day')
+  const [periodBars, setPeriodBars] = useState<Record<string, Candle[]>>({})
+  const [minute, setMinute] = useState<IndexMinute | null>(null)
+  const [periodLoading, setPeriodLoading] = useState(false)
+  const [periodErr, setPeriodErr] = useState('')
+  const sym = state?.symbol ?? ''
+  const targetKey = state ? `${state.symbol}|${state.key ?? ''}` : ''
+
+  // 换目标票时回到日K并清掉上一票的非日线数据
+  useEffect(() => {
+    setKf('day')
+    setMinute(null)
+    setPeriodErr('')
+  }, [targetKey])
+
+  // 分时/周月年K按需拉（弹窗内按 票|周期 记忆）
+  useEffect(() => {
+    if (!state || kf === 'day') return
+    if (kf === 'min' ? minute : periodBars[`${sym}|${kf}`]) return
+    let cancelled = false
+    setPeriodLoading(true)
+    setPeriodErr('')
+    const req = kf === 'min'
+      ? api.intraday(sym).then(r => { if (!cancelled) setMinute(r) })
+      : api.periodBars(sym, kf).then(bars => { if (!cancelled) setPeriodBars(p => ({ ...p, [`${sym}|${kf}`]: bars })) })
+    req
+      .catch(e => { if (!cancelled) setPeriodErr(e instanceof Error ? e.message : '拉取失败') })
+      .finally(() => { if (!cancelled) setPeriodLoading(false) })
+    return () => { cancelled = true }
+  }, [state, sym, kf, minute, periodBars])
+
+  // 分时随大盘页同频刷新（仅弹窗开着且停在分时tab）
+  useEffect(() => {
+    if (!state || kf !== 'min') return
+    const t = window.setInterval(() => { api.intraday(sym).then(setMinute).catch(() => {}) }, 60_000)
+    return () => window.clearInterval(t)
+  }, [state, sym, kf])
+
   if (!state) return null
   const s = state.setup
   const facts = s
     ? setupFacts(s)
     : state.bars && state.bars.length ? basicFacts(state.bars) : []
+  const coarseBars = kf === 'min' || kf === 'day' ? null : periodBars[`${sym}|${kf}`]
+
   return (
     <div className="modal-mask" onClick={onClose}>
       <div className="modal-card card" onClick={e => e.stopPropagation()}>
         <CardHead
-          title={`${state.symbol} ${state.name ?? ''}${s ? ` · ${stageLabel[s.stage]}` : ''}`}
-          sub={s ? `A段 +${s.aRisePct.toFixed(1)}%${s.hasLimitUp ? ' · 含涨停' : ''} · 数据截至 ${s.asOf}` : (state.sub ?? '日K概览')}
+          title={`${state.symbol} ${state.name ?? ''}${s && kf === 'day' ? ` · ${stageLabel[s.stage]}` : ''}`}
+          sub={kf === 'day'
+            ? (s ? `A段 +${s.aRisePct.toFixed(1)}%${s.hasLimitUp ? ' · 含涨停' : ''} · 数据截至 ${s.asOf}` : (state.sub ?? '日K概览'))
+            : kf === 'min'
+              ? '当日分时 · 白线最新价 / 黄线当日均价 · 昨收基准'
+              : `${kfPeriods.find(p => p.key === kf)?.label} · 均线随周期计算`}
           right={
             <span className="focus-nav">
+              <span className="range-tabs">
+                {kfPeriods.map(p => (
+                  <button key={p.key} className={`range-tab${kf === p.key ? ' active' : ''}`} onClick={() => setKf(p.key)}>{p.label}</button>
+                ))}
+              </span>
               <button className="btn ghost small" onClick={() => onOpenBacktest(state.symbol)}>到回测页深看</button>
               <button className="btn ghost small" onClick={onClose}>关闭</button>
             </span>
           }
         />
-        {state.bars && state.bars.length
-          ? <MiniKline bars={setupWindow(state.bars, s)} setup={s} height={420} />
-          : <Spinner text="加载K线…" />}
-        {facts.length > 0 && (
+        {kf === 'min' ? (
+          minute ? <IntradayChart data={minute} height={420} />
+            : <div className="chart-empty">{periodLoading ? '正在拉取分时数据…' : periodErr || '暂无分时数据'}</div>
+        ) : kf === 'day' ? (
+          state.bars === null
+            ? <Spinner text="加载K线…" />
+            : state.bars.length
+              ? <MiniKline bars={setupWindow(state.bars, s)} setup={s} height={420} />
+              : <div className="chart-empty">该股未同步日K · 可切换分时 / 周K / 月K / 年K 查看，或到档案抽屉点「同步日K」</div>
+        ) : coarseBars ? (
+          <MiniKline bars={coarseBars} height={420} />
+        ) : (
+          <div className="chart-empty">{periodLoading ? '正在拉取K线数据…' : periodErr || '暂无数据'}</div>
+        )}
+        {kf === 'day' && facts.length > 0 && (
           <div className="modal-facts">
             {facts.map(([k, v]) => (
               <div key={k} className="fact"><span>{k}</span><b>{v}</b></div>

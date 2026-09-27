@@ -20,7 +20,7 @@ const COLUMNS: Array<{ key: string; label: string; numeric?: boolean }> = [
   { key: 'amount', label: '成交额', numeric: true },
   { key: 'listDate', label: '上市日期' },
   { key: 'concepts', label: '概念', numeric: true },
-  { key: 'bars', label: 'K线', numeric: true },
+  { key: 'bars', label: '详情', numeric: true },
 ]
 
 function fmtAmount(v: number): string {
@@ -275,12 +275,12 @@ export default function Stocks() {
                 {result.items.map(item => {
                   const q = quotes[item.symbol]
                   return (
-                    <tr key={item.symbol} className="rowlink" onClick={() => openDrawer(item)} {...rowHover(item)}>
+                    <tr key={item.symbol} className="rowlink" onClick={() => kline.openDetail(klineTarget(item))} {...rowHover(item)}>
                       <td>
                         {item.barCount > 0 ? (
                           <button
                             className="link-btn code"
-                            title="点击查看K线"
+                            title="点击查看K线大图"
                             onClick={e => { e.stopPropagation(); kline.openDetail(klineTarget(item)) }}
                           >
                             {item.symbol}
@@ -299,9 +299,9 @@ export default function Stocks() {
                       <td className="num">{q ? fmtAmount(q.amount) : '—'}</td>
                       <td className="muted-c">{item.listDate || '—'}</td>
                       <td className="num" title={item.concepts.join('、')}>{item.concepts.length || '—'}</td>
-                      <td>
+                      <td title="打开档案详情" onClick={e => { e.stopPropagation(); openDrawer(item) }}>
                         {item.barCount > 0 ? (
-                          <span className="muted-c">{item.barCount} 根</span>
+                          <span className="link-btn">{item.barCount} 根</span>
                         ) : (
                           <Button variant="mini" onClick={e => { e.stopPropagation(); handleSync(item.symbol) }} loading={!!syncing[item.symbol]}>
                             同步日K

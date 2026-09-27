@@ -421,10 +421,10 @@ export const api = {
     }),
   stocks: () => request<StockSummary[]>('/api/stocks'),
   marketIndices: () => request<IndexInfo[]>('/api/market/indices'),
-  indexPeriodBars: (symbol: string, period: IndexPeriod) =>
-    request<Candle[]>(`/api/market/index-period?symbol=${encodeURIComponent(symbol)}&period=${period}`),
-  indexIntraday: (symbol: string) =>
-    request<IndexMinute>(`/api/market/intraday?symbol=${encodeURIComponent(symbol)}`),
+  periodBars: (symbol: string, period: IndexPeriod) =>
+    request<Candle[]>(`/api/period-bars?symbol=${encodeURIComponent(symbol)}&period=${period}`),
+  intraday: (symbol: string) =>
+    request<IndexMinute>(`/api/intraday?symbol=${encodeURIComponent(symbol)}`),
   marketSentiment: () => request<SentimentResult>('/api/market/sentiment'),
   marketSectors: () => request<SectorsResult>('/api/market/sectors'),
   marketGuide: () => request<GuideResult>('/api/market/guide'),

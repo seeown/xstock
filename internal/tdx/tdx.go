@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -137,6 +138,48 @@ func candlesFromBars(raw []proto.SecurityBar) []market.Candle {
 // gotdx's StockFullKLine pages by only 20 bars (150+ requests for a typical
 // stock); 600 is what gotdx's own high-volume methods use and TDX accepts.
 const klinePage = 600
+
+// FetchStockPeriodBars downloads a stock's full history at a coarser TDX kline
+// period (weekly / monthly / yearly), forward-adjusted like the daily series
+// so the coarse bars line up with the locally stored QFQ dailies.
+func (c *Client) FetchStockPeriodBars(symbol string, category uint16) ([]market.Candle, error) {
+	mkt, code, err := types.DetectMarket(strings.ToUpper(symbol))
+	if err != nil {
+		return nil, err
+	}
+	if mkt != types.MarketSH && mkt != types.MarketSZ && mkt != types.MarketBJ {
+		return nil, fmt.Errorf("仅支持沪深北代码，例如 600519.SH")
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	var raw []proto.SecurityBar
+	for start := uint16(0); ; start += klinePage {
+		page, err := c.client.GetKLine(category, mkt.Uint8(), code, start, klinePage, 1, types.AdjustQFQ)
+		if err != nil {
+			if cerr := c.connectWatchdog(); cerr != nil {
+				return nil, cerr
+			}
+			page, err = c.client.GetKLine(category, mkt.Uint8(), code, start, klinePage, 1, types.AdjustQFQ)
+			if err != nil {
+				return nil, fmt.Errorf("通达信行情拉取失败: %w", err)
+			}
+		}
+		if len(page.List) == 0 {
+			break
+		}
+		raw = append(raw, page.List...)
+		if int(page.Count) < klinePage || start > 65535-klinePage {
+			break
+		}
+	}
+	out := candlesFromBars(raw)
+	if len(out) == 0 {
+		return nil, fmt.Errorf("未获取到 %s 的K线数据", symbol)
+	}
+	return out, nil
+}
 
 // FetchDailyQFQ downloads the full daily history (forward-adjusted, 前复权)
 // for a symbol like 600519.SH or 000001.SZ. The whole series is re-downloaded

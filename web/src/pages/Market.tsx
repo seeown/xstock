@@ -92,10 +92,10 @@ export default function Market() {
     setPeriodLoading(true)
     try {
       if (kind === 'min') {
-        const r = await api.indexIntraday(symbol)
+        const r = await api.intraday(symbol)
         setIntraday(prev => ({ ...prev, [symbol]: r }))
       } else {
-        const bars = await api.indexPeriodBars(symbol, kind)
+        const bars = await api.periodBars(symbol, kind)
         setPeriodBars(prev => ({ ...prev, [`${symbol}|${kind}`]: bars }))
       }
     } catch (e) {
@@ -115,7 +115,7 @@ export default function Market() {
   useEffect(() => {
     if (!isActiveView || kf !== 'min' || !active) return
     const t = window.setInterval(() => {
-      api.indexIntraday(active).then(r => setIntraday(prev => ({ ...prev, [active]: r }))).catch(() => {})
+      api.intraday(active).then(r => setIntraday(prev => ({ ...prev, [active]: r }))).catch(() => {})
     }, 60_000)
     return () => window.clearInterval(t)
   }, [isActiveView, kf, active])

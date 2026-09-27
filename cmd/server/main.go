@@ -327,13 +327,13 @@ func main() {
 		writeJSON(w, 200, out)
 	})
 
-	// GET /api/market/index-period?symbol=000001.SH&period=week|month|year —
-	// TDX-native weekly/monthly/yearly index bars, live with a 10min cache.
-	mux.HandleFunc("GET /api/market/index-period", func(w http.ResponseWriter, r *http.Request) {
+	// GET /api/period-bars?symbol=000001.SH|600519.SH&period=week|month|year —
+	// TDX-native coarse bars for a watchlist index or any SH/SZ stock, live
+	// with a 10min cache. /api/market/index-period is the old index-only path.
+	periodBars := func(w http.ResponseWriter, r *http.Request) {
 		symbol := strings.ToUpper(r.URL.Query().Get("symbol"))
-		def, ok := tdx.IndexOf(symbol)
-		if !ok {
-			errorJSON(w, 400, "未知指数: "+symbol)
+		if symbol == "" {
+			errorJSON(w, 400, "missing symbol")
 			return
 		}
 		period := r.URL.Query().Get("period")
@@ -349,35 +349,42 @@ func main() {
 			errorJSON(w, 400, "period 仅支持 week/month/year")
 			return
 		}
-		v, err := liveFetch("idxbars:"+symbol+":"+period, 10*time.Minute, func() (any, error) {
-			return source.FetchIndexBars(def, category)
+		v, err := liveFetch("pbars:"+symbol+":"+period, 10*time.Minute, func() (any, error) {
+			if def, ok := tdx.IndexOf(symbol); ok {
+				return source.FetchIndexBars(def, category)
+			}
+			return source.FetchStockPeriodBars(symbol, category)
 		})
 		if err != nil {
 			errorJSON(w, 502, err.Error())
 			return
 		}
 		writeJSON(w, 200, v)
-	})
+	}
+	mux.HandleFunc("GET /api/period-bars", periodBars)
+	mux.HandleFunc("GET /api/market/index-period", periodBars)
 
-	// GET /api/market/intraday?symbol=000001.SH — the latest session's minute
-	// time-sharing series (price + running average + per-minute volume) plus
-	// the previous close used as the baseline. Refreshed at most every 45s.
-	mux.HandleFunc("GET /api/market/intraday", func(w http.ResponseWriter, r *http.Request) {
+	// GET /api/intraday?symbol= — the latest session's minute time-sharing
+	// series (price + running average + per-minute volume) plus the previous
+	// close baseline, for a watchlist index or any SH/SZ stock. 45s cache.
+	// /api/market/intraday is the old index-only path.
+	intraday := func(w http.ResponseWriter, r *http.Request) {
 		symbol := strings.ToUpper(r.URL.Query().Get("symbol"))
-		def, ok := tdx.IndexOf(symbol)
-		if !ok {
-			errorJSON(w, 400, "未知指数: "+symbol)
+		if symbol == "" {
+			errorJSON(w, 400, "missing symbol")
 			return
 		}
-		v, err := liveFetch("idxmin:"+symbol, 45*time.Second, func() (any, error) {
-			return source.FetchIndexMinute(def)
+		v, err := liveFetch("min:"+symbol, 45*time.Second, func() (any, error) {
+			return source.FetchMinute(symbol)
 		})
 		if err != nil {
 			errorJSON(w, 502, err.Error())
 			return
 		}
 		writeJSON(w, 200, v)
-	})
+	}
+	mux.HandleFunc("GET /api/intraday", intraday)
+	mux.HandleFunc("GET /api/market/intraday", intraday)
 
 	mux.HandleFunc("POST /api/bars/{symbol}", func(w http.ResponseWriter, r *http.Request) {
 		symbol := strings.ToUpper(r.PathValue("symbol"))
