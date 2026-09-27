@@ -309,7 +309,7 @@ export default function Stocks() {
                         )}
                       </td>
                       <td>
-                        <button className="link-btn" onClick={e => { e.stopPropagation(); navigate(`/?symbol=${item.symbol}`) }}>看K线</button>
+                        <button className="link-btn" onClick={e => { e.stopPropagation(); navigate(`/?symbol=${item.symbol}`) }}>回测</button>
                       </td>
                     </tr>
                   )
