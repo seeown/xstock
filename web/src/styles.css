@@ -166,7 +166,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   font-size: 13.5px;
   transition: background .15s ease, color .15s ease;
 }
-.nav-item .no { font: 10.5px var(--mono); color: #5E7694; }
 .nav-item .txt { flex: 1; }
 .nav-item:hover { color: var(--ink); background: rgba(255, 255, 255, 0.06); }
 .nav-item.active {
@@ -175,7 +174,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   box-shadow: inset 0 0 0 1px rgba(125, 211, 252, .30);
   font-weight: 600;
 }
-.nav-item.active .no { color: var(--accent-soft); }
 
 .sidebar-foot { margin-top: auto; padding: 14px 8px 0; border-top: 1px dashed var(--line); }
 .risk-pill {
@@ -710,7 +708,6 @@ td.num, th.num { text-align: right; }
   .brand, .sidebar-foot { display: none; }
   .sidebar nav { margin: 0; flex-direction: row; flex: 1; justify-content: space-around; }
   .nav-item { flex-direction: column; gap: 3px; padding: 6px 10px; font-size: 11px; }
-  .nav-item .no { font-size: 10px; }
   .nav-item.active { box-shadow: inset 0 0 0 1px rgba(125, 211, 252, .30); }
   .page { padding: 0 14px 96px; }
   .page-head { margin: 0 -14px 14px; padding: 10px 14px; }

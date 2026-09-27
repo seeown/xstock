@@ -58,7 +58,6 @@ export default function Layout({ children }: { children: ReactNode }) {
               onFocus={leaveItem}
               onClick={e => clickItem(e, item.key)}
             >
-              <span className="no">{item.no}</span>
               <span className="txt">{item.label}</span>
             </a>
           ))}
