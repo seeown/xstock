@@ -252,7 +252,7 @@ export default function Screen() {
                 {t.short}（{tabCount(t.key)}）
               </Chip>
             ))}
-            <SearchPill ref={searchRef} value={qParam} onChange={e => { setQParam(e.target.value || null); setPage(1); setSel(-1) }} />
+            <SearchPill ref={searchRef} className="push-right" value={qParam} onChange={e => { setQParam(e.target.value || null); setPage(1); setSel(-1) }} />
           </FilterBar>
           <p className="stage-note">{meta.sub}</p>
 

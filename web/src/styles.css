@@ -1020,7 +1020,6 @@ th.sorted { color: var(--blue); }
 }
 .select-pill .caret { font-size: 9px; color: var(--muted); }
 .search-pill {
-  margin-left: auto;
   font-size: 12.5px;
   border: 1px solid var(--card-border);
   border-radius: var(--r-pill);
@@ -1029,6 +1028,8 @@ th.sorted { color: var(--blue); }
   width: 220px;
   background: rgba(255, 255, 255, .05);
 }
+/* 需要搜索框靠右的过滤条（筛查页：阶段chips在左、搜索在右）显式声明 */
+.push-right { margin-left: auto; }
 .search-pill::placeholder { color: var(--muted); }
 .search-pill:focus {
   outline: none;
@@ -1424,6 +1425,7 @@ table.tb { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 select.select-pill.native {
   appearance: none;
   -webkit-appearance: none;
+  min-width: 110px;
   padding-right: 24px;
   background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
   background-position: calc(100% - 14px) 55%, calc(100% - 10px) 55%;

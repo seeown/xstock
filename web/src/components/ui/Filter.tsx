@@ -18,8 +18,9 @@ export function SelectPill({ label, value, ...rest }: ButtonHTMLAttributes<HTMLB
 }
 
 export const SearchPill = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
-  function SearchPill({ placeholder = '搜索代码 / 名称…（/）', ...rest }, ref) {
-    return <input ref={ref} type="search" className="search-pill mono" placeholder={placeholder} {...rest} />
+  function SearchPill({ placeholder = '搜索代码 / 名称…（/）', className = '', ...rest }, ref) {
+    // 外部 className（如 push-right）与基础样式合并，不能覆盖
+    return <input ref={ref} type="search" className={`search-pill mono ${className}`.trim()} placeholder={placeholder} {...rest} />
   },
 )
 
