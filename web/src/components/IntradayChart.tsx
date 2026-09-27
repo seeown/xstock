@@ -107,6 +107,10 @@ export default function IntradayChart({ data, height = 420 }: { data: IndexMinut
   const up = last.price >= preClose
   const lineColor = up ? UP : DOWN
 
+  // 竞价撮合结果：分时首点即竞价开盘价，相对昨收即高开/低开幅度
+  const openP = points[0].price
+  const openPct = pctOf(openP)
+
   const pricePath = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.price).toFixed(1)}`).join(' ')
   const avgPath = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.avg).toFixed(1)}`).join(' ')
   const areaPath = `${pricePath} L${x(n - 1).toFixed(1)},${y(preClose).toFixed(1)} L${x(0).toFixed(1)},${y(preClose).toFixed(1)} Z`
@@ -139,6 +143,10 @@ export default function IntradayChart({ data, height = 420 }: { data: IndexMinut
         <span>
           {data.date} · 最新 <b style={{ color: lineColor }}>{fmt2(last.price)}</b>{' '}
           <span className={lastPct >= 0 ? 'up-text' : 'down-text'}>{fmtPct(lastPct)}</span>
+        </span>
+        <span className="muted-c">
+          竞价 <b style={{ color: 'var(--ink)' }}>{fmt2(openP)}</b>{' '}
+          <span className={openPct >= 0 ? 'up-text' : 'down-text'}>{fmtPct(openPct)}</span>
         </span>
         <span className="muted-c">均价 <b style={{ color: AVG }}>{fmt2(last.avg)}</b></span>
         <span className="muted-c">昨收 {fmt2(preClose)}</span>
