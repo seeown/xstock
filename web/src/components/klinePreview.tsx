@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Candle, IndexMinute, NPSetup } from '../api'
 import { api } from '../api'
+import { useWatchlist } from '../watchlist'
 import IntradayChart from './IntradayChart'
 import MiniKline, { setupWindow } from './MiniKline'
 import { CardHead, Spinner, fmt, pct } from './ui'
@@ -186,6 +187,7 @@ export function KlineDetailModal({ state, onClose, onOpenBacktest }: {
   const [minute, setMinute] = useState<IndexMinute | null>(null)
   const [periodLoading, setPeriodLoading] = useState(false)
   const [periodErr, setPeriodErr] = useState('')
+  const watch = useWatchlist()
   const sym = state?.symbol ?? ''
   const targetKey = state ? `${state.symbol}|${state.key ?? ''}` : ''
 
@@ -243,6 +245,13 @@ export function KlineDetailModal({ state, onClose, onOpenBacktest }: {
                   <button key={p.key} className={`range-tab${kf === p.key ? ' active' : ''}`} onClick={() => setKf(p.key)}>{p.label}</button>
                 ))}
               </span>
+              <button
+                className={`btn ghost small${watch.has(state.symbol) ? ' star-on' : ''}`}
+                onClick={() => watch.toggle(state.symbol)}
+                title={watch.has(state.symbol) ? '移出自选' : '加入自选'}
+              >
+                {watch.has(state.symbol) ? '★ 已自选' : '☆ 自选'}
+              </button>
               <button className="btn ghost small" onClick={() => onOpenBacktest(state.symbol)}>到回测页深看</button>
               <button className="btn ghost small" onClick={onClose}>关闭</button>
             </span>

@@ -3,6 +3,7 @@ import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type ConceptCount, type ProfileListItem, type ProfilePageResult, type Quote, type SectorRow, type Signal, type StockProfile } from '../api'
 import { KlineDetailModal, KlinePopover, useKlinePreview } from '../components/klinePreview'
+import { useWatchlist } from '../watchlist'
 import { Banner, Button, Card, Chip, EmptyState, SearchPill, Skeleton, fmt, pct } from '../components/ui'
 
 const BOARDS = ['上证主板', '深证主板', '创业板', '科创板', '北交所']
@@ -36,12 +37,14 @@ interface Filters {
   industry: string
   concept: string
   syncedOnly: boolean
+  watchOnly: boolean
 }
 
-const EMPTY_FILTERS: Filters = { q: '', board: '', industry: '', concept: '', syncedOnly: false }
+const EMPTY_FILTERS: Filters = { q: '', board: '', industry: '', concept: '', syncedOnly: false, watchOnly: false }
 
 export default function Stocks() {
   const navigate = useNavigate()
+  const watch = useWatchlist()
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
   const [appliedQ, setAppliedQ] = useState('')
   const [sortKey, setSortKey] = useState('symbol')
@@ -97,7 +100,7 @@ export default function Stocks() {
     try {
       const r = await api.profiles({
         q: appliedQ, board: filters.board, industry: filters.industry,
-        concept: filters.concept, synced: filters.syncedOnly, page,
+        concept: filters.concept, synced: filters.syncedOnly, watch: filters.watchOnly, page,
         sort: sortKey, order: sortOrder,
       })
       if (seq === loadSeq.current) setResult(r)
@@ -106,7 +109,7 @@ export default function Stocks() {
     } finally {
       if (seq === loadSeq.current) setLoading(false)
     }
-  }, [appliedQ, filters.board, filters.industry, filters.concept, filters.syncedOnly, page, sortKey, sortOrder])
+  }, [appliedQ, filters.board, filters.industry, filters.concept, filters.syncedOnly, filters.watchOnly, page, sortKey, sortOrder])
 
   useEffect(() => {
     load()
@@ -222,8 +225,9 @@ export default function Stocks() {
             <option value="">全部概念</option>
             {concepts.map(c => <option key={c.concept} value={c.concept}>{c.concept}（{c.count}）</option>)}
           </select>
+          <Chip active={filters.watchOnly} onClick={() => patchFilters({ watchOnly: !filters.watchOnly })}>仅看自选</Chip>
           <Chip active={filters.syncedOnly} onClick={() => patchFilters({ syncedOnly: !filters.syncedOnly })}>仅看已同步K线</Chip>
-          {(filters.q || filters.board || filters.industry || filters.concept || filters.syncedOnly) && (
+          {(filters.q || filters.board || filters.industry || filters.concept || filters.syncedOnly || filters.watchOnly) && (
             <Button variant="mini" onClick={() => { setFilters(EMPTY_FILTERS); setAppliedQ(''); setPage(1) }}>重置</Button>
           )}
         </div>
@@ -259,6 +263,7 @@ export default function Stocks() {
             <table className="tb">
               <thead>
                 <tr>
+                  <th className="star-col" aria-label="自选" />
                   {COLUMNS.map(col => (
                     <th
                       key={col.key}
@@ -276,6 +281,15 @@ export default function Stocks() {
                   const q = quotes[item.symbol]
                   return (
                     <tr key={item.symbol} className="rowlink" onClick={() => kline.openDetail(klineTarget(item))} {...rowHover(item)}>
+                      <td className="star-col">
+                        <button
+                          className={`star-btn${watch.has(item.symbol) ? ' on' : ''}`}
+                          title={watch.has(item.symbol) ? '移出自选' : '加入自选'}
+                          onClick={e => { e.stopPropagation(); watch.toggle(item.symbol) }}
+                        >
+                          {watch.has(item.symbol) ? '★' : '☆'}
+                        </button>
+                      </td>
                       <td>
                         {item.barCount > 0 ? (
                           <button

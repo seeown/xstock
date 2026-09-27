@@ -275,6 +275,14 @@ export interface ProfileListItem {
   listDate: string
   concepts: string[]
   barCount: number
+  watched?: boolean
+}
+
+export interface WatchItem {
+  symbol: string
+  name?: string
+  note?: string
+  addedAt?: string
 }
 
 export interface ProfilePageResult {
@@ -357,6 +365,7 @@ export interface ProfileQuery {
   industry?: string
   concept?: string
   synced?: boolean
+  watch?: boolean
   sort?: string
   order?: 'asc' | 'desc'
   page?: number
@@ -439,12 +448,18 @@ export const api = {
     if (query.industry) params.set('industry', query.industry)
     if (query.concept) params.set('concept', query.concept)
     if (query.synced) params.set('synced', '1')
+    if (query.watch) params.set('watch', '1')
     if (query.sort) params.set('sort', query.sort)
     if (query.order) params.set('order', query.order)
     params.set('page', String(query.page ?? 1))
     params.set('pageSize', String(query.pageSize ?? 50))
     return request<ProfilePageResult>(`/api/profiles?${params.toString()}`)
   },
+  watchlist: () => request<WatchItem[]>('/api/watchlist'),
+  watchAdd: (symbol: string) =>
+    request<{ symbol: string; ok: boolean }>(`/api/watchlist/${encodeURIComponent(symbol)}`, { method: 'POST' }),
+  watchRemove: (symbol: string) =>
+    request<{ symbol: string; ok: boolean }>(`/api/watchlist/${encodeURIComponent(symbol)}`, { method: 'DELETE' }),
   concepts: () => request<ConceptCount[]>('/api/concepts'),
   industries: () => request<string[]>('/api/industries'),
   syncState: () => request<SyncState>('/api/sync-state'),

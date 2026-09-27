@@ -3,13 +3,15 @@ import Layout from './components/Layout'
 import DevUI from './pages/DevUI'
 import { LegacyRedirect, Shell, ViewProvider } from './shell'
 import { VIEWS } from './views'
+import { WatchlistProvider } from './watchlist'
 
 // 单壳应用：/ 下是保活 Tab 壳(视图 = ?view=)，菜单悬浮/点击切换；
 // 旧路径(/screen 等)带全部 query 重定向进壳；/dev/ui 保持独立路由。
 export default function App() {
   return (
     <ViewProvider>
-      <Routes>
+      <WatchlistProvider>
+        <Routes>
         <Route path="/" element={<Layout><Shell /></Layout>} />
         {/* 开发用组件样张路由，不进壳 */}
         <Route path="/dev/ui" element={<DevUI />} />
@@ -19,6 +21,7 @@ export default function App() {
         ))}
         <Route path="*" element={<UnknownRedirect />} />
       </Routes>
+      </WatchlistProvider>
     </ViewProvider>
   )
 }

@@ -1433,6 +1433,16 @@ select.select-pill.native {
   background-repeat: no-repeat;
   cursor: pointer;
 }
+/* 自选星标列：窄列、按钮不参与行点击 */
+.tb .star-col { width: 34px; text-align: center; }
+.star-btn {
+  border: 0; background: transparent; padding: 2px 4px;
+  font-size: 15px; line-height: 1; color: #55688A;
+  cursor: pointer; transition: color 0.15s, transform 0.1s;
+}
+.star-btn:hover { color: #FFC46B; transform: scale(1.15); }
+.star-btn.on { color: #FFC46B; }
+.btn.ghost.small.star-on { color: #FFC46B; border-color: rgba(255, 196, 107, 0.45); }
 .tb th.sortable { cursor: pointer; user-select: none; }
 .tb th.sortable:hover { color: var(--accent-soft); }
 .tb th.sorted { color: var(--accent-soft); }

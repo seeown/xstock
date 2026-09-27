@@ -260,6 +260,8 @@ type ProfileFilter struct {
 	Industry   string
 	Concept    string
 	SyncedOnly bool // only stocks that also have local bars
+	WatchSet   map[string]bool
+	WatchOnly  bool // with WatchSet: restrict to watched symbols
 }
 
 // ProfileListItem couples a profile with its local bar-series status. The
@@ -273,6 +275,7 @@ type ProfileListItem struct {
 	ListDate string   `json:"listDate"`
 	Concepts []string `json:"concepts"`
 	BarCount int      `json:"barCount"`
+	Watched  bool     `json:"watched"`
 }
 
 // QueryProfiles filters the in-memory profile cache (a few thousand rows, so
@@ -300,9 +303,14 @@ func (s *Store) QueryProfiles(f ProfileFilter) []ProfileListItem {
 		if f.SyncedOnly && barCount == 0 {
 			continue
 		}
+		watched := f.WatchSet[p.Symbol]
+		if f.WatchOnly && !watched {
+			continue
+		}
 		matched = append(matched, ProfileListItem{
 			Symbol: p.Symbol, Name: p.Name, Industry: p.Industry, Market: p.Market,
 			Board: p.Board, ListDate: p.ListDate, Concepts: p.Concepts, BarCount: barCount,
+			Watched: watched,
 		})
 	}
 	s.mu.RUnlock()

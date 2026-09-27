@@ -246,12 +246,24 @@ func main() {
 	// Stock browser: filtered profiles over the whole market, sortable on
 	// every column (price/change/amount ranking uses the quote cache).
 	mux.HandleFunc("GET /api/profiles", func(w http.ResponseWriter, r *http.Request) {
+		watchOnly := r.URL.Query().Get("watch") == "1"
+		var watchSet map[string]bool
+		if watchOnly {
+			set, err := s.WatchSet(r.Context())
+			if err != nil {
+				errorJSON(w, 500, err.Error())
+				return
+			}
+			watchSet = set
+		}
 		items := s.QueryProfiles(store.ProfileFilter{
 			Q:          r.URL.Query().Get("q"),
 			Board:      r.URL.Query().Get("board"),
 			Industry:   r.URL.Query().Get("industry"),
 			Concept:    r.URL.Query().Get("concept"),
 			SyncedOnly: r.URL.Query().Get("synced") == "1",
+			WatchSet:   watchSet,
+			WatchOnly:  watchOnly,
 		})
 		sortProfiles(items, r.URL.Query().Get("sort"), r.URL.Query().Get("order") == "desc", quoteCache.Snapshot())
 		page := queryInt(r, "page", 1)
@@ -276,6 +288,32 @@ func main() {
 		})
 	})
 	mux.HandleFunc("GET /api/concepts", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, s.ConceptCounts()) })
+
+	// 自选股：单用户工具，无属主。watch=1 过滤 /api/profiles 已在上面支持。
+	mux.HandleFunc("GET /api/watchlist", func(w http.ResponseWriter, r *http.Request) {
+		items, err := s.WatchList(r.Context())
+		if err != nil {
+			errorJSON(w, 500, err.Error())
+			return
+		}
+		writeJSON(w, 200, items)
+	})
+	mux.HandleFunc("POST /api/watchlist/{symbol}", func(w http.ResponseWriter, r *http.Request) {
+		symbol := strings.ToUpper(r.PathValue("symbol"))
+		if err := s.WatchAdd(r.Context(), symbol); err != nil {
+			errorJSON(w, 500, err.Error())
+			return
+		}
+		writeJSON(w, 200, map[string]any{"symbol": symbol, "ok": true})
+	})
+	mux.HandleFunc("DELETE /api/watchlist/{symbol}", func(w http.ResponseWriter, r *http.Request) {
+		symbol := strings.ToUpper(r.PathValue("symbol"))
+		if err := s.WatchRemove(r.Context(), symbol); err != nil {
+			errorJSON(w, 500, err.Error())
+			return
+		}
+		writeJSON(w, 200, map[string]any{"symbol": symbol, "ok": true})
+	})
 	mux.HandleFunc("GET /api/industries", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, s.Industries()) })
 
 	// GET /api/quotes?symbols=600519.SH,000001.SZ — latest prices for one
