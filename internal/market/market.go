@@ -34,6 +34,21 @@ type NParams struct {
 	StopLossPct       float64 `json:"stopLossPct"`
 	TakeProfitPct     float64 `json:"takeProfitPct"`
 	MaxHoldDays       int     `json:"maxHoldDays"`
+	// AboveMA 可选买入过滤：信号日收盘须高于该周期均线（0=不限，5/20 常用）。
+	AboveMA int `json:"aboveMA"`
+}
+
+// closeAboveMAIdx 判定 idx 处收盘是否高于含 idx 的前 period 根收盘简单均线；
+// 均线数据不足（新股）视为不满足。
+func closeAboveMAIdx(bars []Candle, idx, period int) bool {
+	if period <= 0 || idx < 0 || idx+1 < period {
+		return false
+	}
+	sum := 0.0
+	for i := idx + 1 - period; i <= idx; i++ {
+		sum += bars[i].Close
+	}
+	return bars[idx].Close > sum/float64(period)
 }
 
 func DefaultParams() NParams {
@@ -150,6 +165,9 @@ func FindNSignals(symbol string, bars []Candle, p NParams) []Signal {
 			requiredBreakout := priorHigh * (1 + p.BreakoutBufferPct/100)
 			if bars[breakout].Close < requiredBreakout || volumeRatio < p.VolumeRatioMin {
 				continue
+			}
+			if p.AboveMA > 0 && !closeAboveMAIdx(bars, breakout, p.AboveMA) {
+				continue // 股价高于均线过滤：突破日收盘低于所选均线，信号作废
 			}
 			dayChange := 0.0
 			if prev := bars[breakout-1].Close; prev > 0 {

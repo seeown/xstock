@@ -118,7 +118,7 @@ export default function Strategy() {
 
   const selected = rows.find(r => r.id === selectedId) ?? rows[0] ?? null
   const fields = selected
-    ? Object.entries(selected.params as unknown as Record<string, unknown>).filter(([, v]) => typeof v === 'number')
+    ? Object.entries(selected.params as unknown as Record<string, unknown>).filter(([k, v]) => typeof v === 'number' && k !== 'aboveMA')
     : []
   const dirty = !!selected && !selected.builtin && draft != null
 
@@ -311,6 +311,19 @@ export default function Strategy() {
                     onChange={e => setDraft(prev => ({ ...(prev ?? {}), [key]: Number(e.target.value) }))}
                   />
                 ))}
+                <div className="form-row">
+                  <span className="fl">股价高于均线</span>
+                  <select
+                    className="select-pill native"
+                    disabled={selected.builtin}
+                    value={numAt('aboveMA', Number((selected.params as { aboveMA?: number }).aboveMA ?? 0))}
+                    onChange={e => setDraft(prev => ({ ...(prev ?? {}), aboveMA: Number(e.target.value) }))}
+                  >
+                    <option value={0}>不限</option>
+                    <option value={5}>5日均线</option>
+                    <option value={20}>20日均线</option>
+                  </select>
+                </div>
                 {'excludeOneWordBoard' in (selected.params as object) && (
                   <div className="form-row">
                     <span className="fl">排除一字首板</span>

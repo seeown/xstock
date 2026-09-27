@@ -467,6 +467,21 @@ export default function Dashboard() {
                 {errors[f.key] && <span className="param-err">{errors[f.key]}</span>}
               </label>
             ))}
+            <label className="param-field">
+              <span>股价高于均线</span>
+              <span className="param-input">
+                <select
+                  className="select-pill native"
+                  value={(params as { aboveMA?: number }).aboveMA ?? 0}
+                  onChange={e => setParams({ ...params, aboveMA: Number(e.target.value) } as StrategyParams)}
+                >
+                  <option value={0}>不限</option>
+                  <option value={5}>5日均线</option>
+                  <option value={20}>20日均线</option>
+                </select>
+                <em>信号日收盘须在均线上方</em>
+              </span>
+            </label>
             {strategy === 'zt' && (
               <label className="param-field">
                 <span>排除一字首板</span>

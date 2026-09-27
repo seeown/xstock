@@ -19,6 +19,7 @@ export interface NParams {
   stopLossPct: number
   takeProfitPct: number
   maxHoldDays: number
+  aboveMA?: number
 }
 
 // 首板回调（N 字涨停）策略参数：首板涨停 → 缩量回调 → 放量突破。
@@ -37,6 +38,7 @@ export interface FirstBoardParams {
   stopLossPct: number
   takeProfitPct: number
   maxHoldDays: number
+  aboveMA?: number
 }
 
 export type StrategyKind = 'n' | 'zt'

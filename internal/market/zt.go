@@ -140,6 +140,8 @@ type FirstBoardParams struct {
 	StopLossPct   float64 `json:"stopLossPct"`
 	TakeProfitPct float64 `json:"takeProfitPct"`
 	MaxHoldDays   int     `json:"maxHoldDays"`
+	// AboveMA 可选买入过滤：突破日收盘须高于该周期均线（0=不限，5/20 常用）。
+	AboveMA int `json:"aboveMA"`
 }
 
 func DefaultFirstBoardParams() FirstBoardParams {
@@ -239,6 +241,9 @@ func FindFirstBoardSignals(symbol string, bars []Candle, p FirstBoardParams) []S
 			brkVR, ok := volRatio(bars, d+1)
 			if !ok || brkVR < p.BreakoutVolRatioMin || brkVR > p.BreakoutVolRatioMax {
 				continue
+			}
+			if p.AboveMA > 0 && !closeAboveMAIdx(bars, d+1, p.AboveMA) {
+				continue // 股价高于均线过滤：突破日收盘低于所选均线，信号作废
 			}
 			dayChange := 0.0
 			if prev := bars[d].Close; prev > 0 {
