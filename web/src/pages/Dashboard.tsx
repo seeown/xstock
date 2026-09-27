@@ -468,7 +468,7 @@ export default function Dashboard() {
               </label>
             ))}
             <label className="param-field">
-              <span>股价高于均线</span>
+              <span>均线上方</span>
               <span className="param-input">
                 <select
                   className="select-pill native"
@@ -479,7 +479,6 @@ export default function Dashboard() {
                   <option value={5}>5日均线</option>
                   <option value={20}>20日均线</option>
                 </select>
-                <em>信号日收盘须在均线上方</em>
               </span>
             </label>
             {strategy === 'zt' && (

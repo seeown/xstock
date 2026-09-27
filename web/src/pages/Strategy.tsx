@@ -312,7 +312,7 @@ export default function Strategy() {
                   />
                 ))}
                 <div className="form-row">
-                  <span className="fl">股价高于均线</span>
+                  <span className="fl">均线上方</span>
                   <select
                     className="select-pill native"
                     disabled={selected.builtin}
