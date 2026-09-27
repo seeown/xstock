@@ -1482,6 +1482,7 @@ select.select-pill.native {
 
 /* ---- 情绪指南：温度计头卡 ---- */
 .gauge-card { padding: 18px 22px; }
+.gauge-card .split { align-items: center; }
 .gauge-wrap { flex: 0 0 320px; min-width: 280px; }
 .gauge { width: 100%; height: auto; display: block; }
 .gauge-stage { font-size: 20px; font-weight: 800; letter-spacing: .02em; }

@@ -169,35 +169,23 @@ export default function Guide() {
       <header className="page-head">
         <div>
           <h1>情绪指南</h1>
-          <p>量能 × 涨跌停的大盘情绪温度 · 数据截至 {rt.asOf} · 快照 {rt.updatedAt}{rt.final ? ' · 收盘定格' : ' · 盘中'}</p>
+          <p>量能 × 涨跌停的大盘情绪温度 · 数据截至 {rt.asOf}</p>
         </div>
+        <Button variant="ghost" onClick={() => location.reload()}>立即刷新</Button>
       </header>
 
-      {/* 温度计 + 结论：设计稿 07 头部 */}
+      {/* 温度计 + 结论：数字明细由下方 guide-tiles 八宫格承载，这里只留仪表盘与结论 */}
       <Card className="gauge-card">
         <div className="split">
           <div className="gauge-wrap">
             <Gauge score={rt.tempScore} stage={rt.stage} />
           </div>
-          <div className="grow stack">
-            <div>
-              <div className="gauge-stage" style={{ color: band.color }}>{rt.quadrant} · {rt.stage}</div>
-              <p className="muted-c" style={{ margin: '6px 0 0', fontSize: 12.5 }}>
-                温度 {rt.tempScore.toFixed(0)} / 100 · 五档：冰点&lt;20 · 低迷&lt;40 · 中性&lt;60 · 活跃&lt;80 · 亢奋≥80
-              </p>
-            </div>
-            <div className="kv"><span className="k">涨停 / 跌停</span><span className="up-text">{rt.limitUp}</span> / <span className="down-text">{rt.limitDown}</span></div>
-            <div className="kv"><span className="k">炸板率</span><span>{pct(rt.breakRate)}</span></div>
-            <div className="kv"><span className="k">晋级率</span><span>{pct(rt.promoteRate)}</span></div>
-            <div className="kv"><span className="k">两市成交额</span><span className="mono">{rt.amountToday.toFixed(0)} 亿{rt.final ? '' : `（昨日全天 ${rt.amountYesterday.toFixed(0)} 亿）`}</span></div>
-            <div className="kv"><span className="k">量能比</span><span className="mono">{rt.amountRatio.toFixed(2)}×{rt.final ? ' 对前5日均' : ' 对昨日(盘中部分)'}</span></div>
-          </div>
-          <div className="grow stack">
-            <div className="kv"><span className="k">涨跌家数</span><span>{upDown}{rt.upCount + rt.downCount > 0 ? ` · 比 ${(rt.upCount / Math.max(1, rt.downCount)).toFixed(2)}` : ''}</span></div>
-            <div className="kv"><span className="k">最高板</span><span className="mono">{rt.maxBoards || '—'} 板</span></div>
-            <div className="kv"><span className="k">快照时间</span><span className="mono">{rt.updatedAt}</span></div>
-            <div className="kv"><span className="k">口径</span><span>{rt.final ? '收盘定格' : '盘中实时'}</span></div>
-            <Button variant="ghost" onClick={() => location.reload()} style={{ marginTop: 4 }}>立即刷新</Button>
+          <div className="grow">
+            <div className="gauge-stage" style={{ color: band.color }}>{rt.quadrant} · {rt.stage}</div>
+            <p className="muted-c" style={{ margin: '8px 0 0', fontSize: 12.5, lineHeight: 1.75 }}>
+              温度 {rt.tempScore.toFixed(0)} / 100 · 五档：冰点&lt;20 · 低迷&lt;40 · 中性&lt;60 · 活跃&lt;80 · 亢奋≥80<br />
+              快照 {rt.updatedAt} · {rt.final ? '收盘定格' : '盘中实时'} · 每分钟自动刷新
+            </p>
           </div>
         </div>
       </Card>
