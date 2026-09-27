@@ -4,7 +4,7 @@ import { api, type Candle, type IndexInfo, type IndexMinute, type LadderStock, t
 import IntradayChart from '../components/IntradayChart'
 import KlineChart, { computeMA } from '../components/KlineChart'
 import { KlineDetailModal, KlinePopover, useKlinePreview } from '../components/klinePreview'
-import { Banner, Card, CardHead, Sparkline, fmt, pct } from '../components/ui'
+import { Banner, Card, CardHead, KpiCard, Sparkline, fmt, pct } from '../components/ui'
 import { useIsActive } from '../shell'
 
 // 板块表可排序列（数值列，默认降序）。
@@ -225,29 +225,20 @@ export default function Market() {
       </div>
 
       {stats && (
-        <div className="metrics-row market-metrics">
-          <div className="metric">
-            <span className="metric-label">最新收盘</span>
-            <strong className="metric-value">{fmt(stats.close)}</strong>
-            <span className={`metric-hint ${stats.change >= 0 ? 'up-text' : 'down-text'}`}>
-              今日 {stats.change >= 0 ? '+' : ''}{pct(stats.change)}
-            </span>
-          </div>
-          <div className="metric">
-            <span className="metric-label">MA5 五日线</span>
-            <strong className="metric-value ma5-text">{stats.ma5 ? fmt(stats.ma5) : '—'}</strong>
-          </div>
-          <div className="metric">
-            <span className="metric-label">MA10 十日线</span>
-            <strong className="metric-value ma10-text">{stats.ma10 ? fmt(stats.ma10) : '—'}</strong>
-          </div>
-          <div className="metric">
-            <span className="metric-label">均线状态</span>
-            <strong className={`metric-value ${stats.bullish === null ? '' : stats.bullish ? 'up-text' : 'down-text'}`}>
-              {stats.bullish === null ? '—' : stats.bullish ? '多头排列' : '空头排列'}
-            </strong>
-            <span className="metric-hint">{stats.first} ~ {stats.lastDate} · {stats.count} 根</span>
-          </div>
+        <div className="kpis">
+          <KpiCard
+            label="最新收盘"
+            value={fmt(stats.close)}
+            hint={<span className={stats.change >= 0 ? 'up-text' : 'down-text'}>今日 {stats.change >= 0 ? '+' : ''}{pct(stats.change)}</span>}
+          />
+          <KpiCard label="MA5 五日线" value={stats.ma5 ? fmt(stats.ma5) : '—'} valueClass="ma5-text" />
+          <KpiCard label="MA10 十日线" value={stats.ma10 ? fmt(stats.ma10) : '—'} valueClass="ma10-text" />
+          <KpiCard
+            label="均线状态"
+            value={stats.bullish === null ? '—' : stats.bullish ? '多头排列' : '空头排列'}
+            valueClass={stats.bullish === null ? undefined : stats.bullish ? 'up-text' : 'down-text'}
+            hint={`${stats.first} ~ ${stats.lastDate} · ${stats.count} 根`}
+          />
         </div>
       )}
 
@@ -305,30 +296,12 @@ export default function Market() {
         />
         {sent ? (
           <>
-            <div className="metrics-row market-metrics">
-              <div className="metric">
-                <span className="metric-label">涨停</span>
-                <strong className="metric-value pos">{sent.realtime.limitUp}</strong>
-                <span className="metric-hint">盘中触板 {sent.realtime.touched}</span>
-              </div>
-              <div className="metric">
-                <span className="metric-label">跌停</span>
-                <strong className="metric-value neg">{sent.realtime.limitDown}</strong>
-              </div>
-              <div className="metric">
-                <span className="metric-label">炸板率</span>
-                <strong className="metric-value">{pct(sent.realtime.breakRate)}</strong>
-                <span className="metric-hint">触板未封 {sent.realtime.broke} 家</span>
-              </div>
-              <div className="metric">
-                <span className="metric-label">最高板</span>
-                <strong className="metric-value">{sent.realtime.maxBoards || '—'} 连板</strong>
-              </div>
-              <div className="metric">
-                <span className="metric-label">晋级率</span>
-                <strong className="metric-value">{pct(sent.realtime.promoteRate)}</strong>
-                <span className="metric-hint">昨日涨停 {sent.realtime.yesterdayLimit} → 今日仍封 {sent.realtime.promoted}</span>
-              </div>
+            <div className="kpis">
+              <KpiCard label="涨停" value={String(sent.realtime.limitUp)} valueClass="up-text" hint={`盘中触板 ${sent.realtime.touched}`} />
+              <KpiCard label="跌停" value={String(sent.realtime.limitDown)} valueClass="down-text" />
+              <KpiCard label="炸板率" value={pct(sent.realtime.breakRate)} hint={`触板未封 ${sent.realtime.broke} 家`} />
+              <KpiCard label="最高板" value={sent.realtime.maxBoards ? `${sent.realtime.maxBoards} 连板` : '—'} />
+              <KpiCard label="晋级率" value={pct(sent.realtime.promoteRate)} hint={`昨日涨停 ${sent.realtime.yesterdayLimit} → 今日仍封 ${sent.realtime.promoted}`} />
             </div>
             <div className="spark-row">
               {([

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api, type GuideResult } from '../api'
-import { Button, Card, CardHead, ErrorBlock, Skeleton, pct } from '../components/ui'
+import { Button, Card, CardHead, ErrorBlock, KpiCard, Skeleton, pct } from '../components/ui'
 import { useIsActive } from '../shell'
 
 const stageTone: Record<string, string> = {
@@ -190,22 +190,18 @@ export default function Guide() {
         </div>
       </Card>
 
-      <div className="guide-tiles">
+      <div className="kpis">
         {([
-            ['涨停家数', String(rt.limitUp), `炸板 ${rt.broke}`],
-            ['跌停家数', String(rt.limitDown), ''],
-            ['炸板率', pct(rt.breakRate), ''],
-            ['最高板', `${rt.maxBoards || '—'} 板`, ''],
-            ['晋级率', pct(rt.promoteRate), ''],
-            ['涨跌家数', upDown, rt.upCount + rt.downCount > 0 ? `比 ${(rt.upCount / Math.max(1, rt.downCount)).toFixed(2)}` : ''],
-            ['两市成交额', `${rt.amountToday.toFixed(0)} 亿`, rt.final ? '' : `昨日全天 ${rt.amountYesterday.toFixed(0)} 亿`],
-            ['量能比', `${rt.amountRatio.toFixed(2)}×`, rt.final ? '对前5日均' : '对昨日(盘中部分)'],
-          ] as Array<[string, string, string]>).map(([label, value, hint]) => (
-            <div key={label} className="gt-tile">
-              <span>{label}</span>
-              <b>{value}</b>
-              {hint && <em>{hint}</em>}
-            </div>
+            ['涨停家数', String(rt.limitUp), `炸板 ${rt.broke}`, 'up-text'],
+            ['跌停家数', String(rt.limitDown), '', 'down-text'],
+            ['炸板率', pct(rt.breakRate), '', ''],
+            ['最高板', `${rt.maxBoards || '—'} 板`, '', ''],
+            ['晋级率', pct(rt.promoteRate), '', ''],
+            ['涨跌家数', upDown, rt.upCount + rt.downCount > 0 ? `比 ${(rt.upCount / Math.max(1, rt.downCount)).toFixed(2)}` : '', ''],
+            ['两市成交额', `${rt.amountToday.toFixed(0)} 亿`, rt.final ? '' : `昨日全天 ${rt.amountYesterday.toFixed(0)} 亿`, ''],
+            ['量能比', `${rt.amountRatio.toFixed(2)}×`, rt.final ? '对前5日均' : '对昨日(盘中部分)', ''],
+          ] as Array<[string, string, string, string]>).map(([label, value, hint, vc]) => (
+            <KpiCard key={label} label={label} value={value} hint={hint || undefined} valueClass={vc || undefined} />
           ))}
       </div>
 

@@ -323,24 +323,6 @@ textarea { width: 100%; resize: vertical; font-family: ui-monospace, SFMono-Regu
 }
 .dashboard-main { min-width: 0; }
 
-.metrics-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
-  margin-bottom: 18px;
-}
-.metric {
-  background: linear-gradient(180deg, var(--panel-2), var(--panel));
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 15px 17px;
-}
-.metric-label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
-.metric-value { font-size: 21px; font-weight: 700; letter-spacing: -0.3px; font-variant-numeric: tabular-nums; }
-.metric-hint { display: block; color: var(--faint); font-size: 11.5px; margin-top: 4px; }
-.metric.pos .metric-value { color: var(--red); }
-.metric.neg .metric-value { color: var(--green); }
-
 .chart-host { position: relative; width: 100%; overflow: hidden; }
 .chart-host svg { display: block; width: 100%; }
 .chart-empty {
@@ -356,29 +338,29 @@ textarea { width: 100%; resize: vertical; font-family: ui-monospace, SFMono-Regu
 .chart-range { position: absolute; top: 2px; right: 4px; color: var(--faint); font-size: 11.5px; }
 
 /* ---------- Candle chart / market page ---------- */
-.index-tabs { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+/* 指数切换与 K 线周期/范围 tab 同一套胶囊容器（见 .range-tabs/.range-tab） */
+.index-tabs {
+  display: inline-flex; gap: 4px; padding: 4px; flex-wrap: wrap;
+  background: rgba(7, 13, 24, 0.55);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin-bottom: 18px;
+}
 .index-tab {
-  display: flex; flex-direction: column; gap: 3px;
-  min-width: 132px;
-  padding: 11px 16px;
-  border-radius: 12px;
-  border: 1px solid var(--line-strong);
-  background: rgba(15, 26, 45, 0.6);
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 6px 14px;
+  border: 0; border-radius: 7px;
+  background: transparent;
   color: var(--muted);
-  font: inherit;
-  cursor: pointer;
-  text-align: left;
-  transition: all 0.15s ease;
+  font: inherit; cursor: pointer; text-align: left;
+  transition: all 0.15s;
 }
-.index-tab b { color: var(--ink); font-size: 14px; }
-.index-tab span { font-size: 11.5px; }
-.index-tab:hover { border-color: rgba(79, 140, 255, 0.5); }
-.index-tab.active {
-  border-color: rgba(79, 140, 255, 0.65);
-  background: linear-gradient(135deg, rgba(79, 140, 255, 0.16), rgba(79, 140, 255, 0.05));
-  box-shadow: 0 6px 18px rgba(79, 140, 255, 0.15);
-}
+.index-tab b { color: var(--ink); font-size: 13.5px; font-weight: 600; }
+.index-tab span { font-size: 11px; }
+.index-tab:hover { color: var(--ink); }
+.index-tab.active { background: rgba(79, 140, 255, 0.28); }
 .index-tab.active b { color: #fff; }
+.index-tab.active span { color: rgba(255, 255, 255, 0.75); }
 
 .range-tabs {
   display: flex; gap: 4px;
@@ -424,7 +406,6 @@ textarea { width: 100%; resize: vertical; font-family: ui-monospace, SFMono-Regu
 }
 .intraday-tip b { font-variant-numeric: tabular-nums; }
 
-.market-metrics { margin-bottom: 18px; }
 .ma5-text { color: var(--amber) !important; }
 .ma10-text { color: #a78bfa !important; }
 
@@ -575,30 +556,6 @@ td.num, th.num { text-align: right; }
 .mainline-row td:first-child { font-weight: 600; }
 
 /* ---------- 情绪指南 ---------- */
-.guide-tiles {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 10px 14px;
-  padding: 14px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  margin-bottom: 16px;
-}
-.gt-tile {
-  display: flex; flex-direction: column; gap: 4px;
-  padding: 10px 12px;
-  background: var(--bg-soft);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-}
-.gt-tile span { font-size: 11.5px; color: var(--faint); }
-.gt-tile b { font-size: 17px; font-weight: 600; color: var(--ink); display: flex; align-items: baseline; gap: 6px; }
-.gt-tile b.pos { color: #f4577a; }
-.gt-tile b.neg { color: #22c58b; }
-.gt-tile em { font-style: normal; font-size: 11px; color: var(--muted); }
-.gt-stage { font-style: normal; font-size: 12px; font-weight: 500; color: var(--muted); }
-.gt-tile b.pos .gt-stage { color: #ffb1c1; }
-.gt-tile b.neg .gt-stage { color: #7ce3bb; }
 .linechart-wrap { padding: 6px 2px 0; overflow-x: auto; }
 /* 固定像素尺寸：浏览器窗口缩放时图不跟着变大变小，窄窗口内横向滚动。 */
 .linechart { width: 960px; max-width: none; display: block; flex: none; }
@@ -762,9 +719,6 @@ td.num, th.num { text-align: right; }
   .symbol-bar { width: 100%; }
   .symbol-bar input { flex: 1; width: auto; }
   .symbol-bar .btn { flex: 1; }
-  .metrics-row { grid-template-columns: 1fr 1fr; gap: 10px; }
-  .metric { padding: 12px; }
-  .metric-value { font-size: 17px; }
   .card { padding: 16px; }
   .card-head { flex-direction: column; gap: 8px; }
 }
@@ -1023,6 +977,7 @@ th.sorted { color: var(--blue); }
 /* 数字在上(主视觉),标签在下做说明 */
 .kpi .v { display: block; font-size: 22px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.25; }
 .kpi .l { display: block; font-size: 13px; color: var(--muted); margin-top: 1px; }
+.kpi .hint { display: block; font-size: 11.5px; color: var(--faint); margin-top: 3px; }
 
 /* ---- 筛选条 ---- */
 .fbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }

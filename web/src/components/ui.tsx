@@ -2,7 +2,6 @@
 // 新组件放 components/ui/ 下，一组件一文件，在此 re-export。
 export { fmt, pct, money, exitReasonText } from './ui/format'
 export { Card, CardHead } from './ui/Card'
-export { MetricCard } from './ui/MetricCard'
 export { KpiCard } from './ui/KpiCard'
 export type { KpiTone } from './ui/KpiCard'
 export { Button } from './ui/Button'
