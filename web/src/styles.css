@@ -527,22 +527,23 @@ td.num, th.num { text-align: right; }
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
 }
+/* 弹窗事实卡：标签在上(弱化小字)、值在下，竖排避免长短值挤压换行参差 */
 .modal-facts {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 10px 16px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px 10px;
   margin-top: 14px;
 }
 .modal-facts .fact {
-  display: flex; justify-content: space-between; gap: 8px;
-  padding: 7px 10px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+  padding: 8px 11px;
   background: var(--bg-soft);
   border: 1px solid var(--line);
   border-radius: 8px;
   font-size: 12.5px;
 }
-.modal-facts .fact span { color: var(--faint); }
-.modal-facts .fact b { color: var(--ink); font-weight: 600; }
+.modal-facts .fact span { color: var(--faint); font-size: 11.5px; line-height: 1.3; }
+.modal-facts .fact b { color: var(--ink); font-weight: 600; line-height: 1.4; text-align: left; word-break: break-word; }
 
 .pager { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 14px 0 2px; }
 
