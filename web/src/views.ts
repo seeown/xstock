@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react'
+import Auction from './pages/Auction'
 import Dashboard from './pages/Dashboard'
 import DataManager from './pages/DataManager'
 import Guide from './pages/Guide'
@@ -20,13 +21,14 @@ export interface ViewDef {
 
 export const VIEWS: ViewDef[] = [
   { key: 'guide', path: '/guide', label: '情绪指南', no: '01', Component: Guide },
-  { key: 'screen', path: '/screen', label: '股票筛查', no: '02', Component: Screen },
-  { key: 'watchlist', path: '/watchlist', label: '自选股', no: '03', Component: Watchlist },
-  { key: 'market', path: '/market', label: '大盘行情', no: '04', Component: Market },
-  { key: 'stocks', path: '/stocks', label: '个股行情', no: '05', Component: Stocks },
-  { key: 'backtest', path: '/', label: '回测分析', no: '06', Component: Dashboard },
-  { key: 'strategy', path: '/strategy', label: '策略说明', no: '07', Component: Strategy },
-  { key: 'data', path: '/data', label: '数据管理', no: '08', Component: DataManager },
+  { key: 'auction', path: '/auction', label: '竞价异动', no: '02', Component: Auction },
+  { key: 'screen', path: '/screen', label: '股票筛查', no: '03', Component: Screen },
+  { key: 'watchlist', path: '/watchlist', label: '自选股', no: '04', Component: Watchlist },
+  { key: 'market', path: '/market', label: '大盘行情', no: '05', Component: Market },
+  { key: 'stocks', path: '/stocks', label: '个股行情', no: '06', Component: Stocks },
+  { key: 'backtest', path: '/', label: '回测分析', no: '07', Component: Dashboard },
+  { key: 'strategy', path: '/strategy', label: '策略说明', no: '08', Component: Strategy },
+  { key: 'data', path: '/data', label: '数据管理', no: '09', Component: DataManager },
 ]
 
 // 裸 `/`(无 ?view=)默认落在回测分析——与改造前的首页一致，

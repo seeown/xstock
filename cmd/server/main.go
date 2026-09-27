@@ -289,6 +289,58 @@ func main() {
 	})
 	mux.HandleFunc("GET /api/concepts", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, s.ConceptCounts()) })
 
+	// GET /api/auction — 竞价异动分层读数（自选/梯队/点火/异动榜 + 晨报三问）。
+	// 交易日 9:30 后的首次请求顺手归档（定格 bars + 晨报 JSONB，幂等）。
+	mux.HandleFunc("GET /api/auction", func(w http.ResponseWriter, r *http.Request) {
+		if !quoteCache.Ready() {
+			errorJSON(w, 503, "行情快照尚未就绪")
+			return
+		}
+		now := time.Now()
+		weekday := now.Weekday() != time.Saturday && now.Weekday() != time.Sunday
+		hm := now.Hour()*100 + now.Minute()
+		archived := false
+		if weekday && hm >= 930 {
+			date := now.Format("2006-01-02")
+			if _, has, _ := s.AuctionReport(r.Context(), date); !has {
+				if _, err := archiveAuction(s, mv, quoteCache); err != nil {
+					log.Printf("竞价自动归档失败: %v", err)
+				} else {
+					archived = true
+				}
+			} else {
+				archived = true
+			}
+		}
+		res, err := computeAuction(s, mv, quoteCache)
+		if err != nil {
+			errorJSON(w, 500, err.Error())
+			return
+		}
+		if archived {
+			res.ArchivedAt = now.Format("2006-01-02 15:04")
+		} else if d := now.Format("2006-01-02"); now.Weekday() != time.Saturday && now.Weekday() != time.Sunday {
+			if _, has, _ := s.AuctionReport(r.Context(), d); has {
+				res.ArchivedAt = d + " 已归档"
+			}
+		}
+		writeJSON(w, 200, res)
+	})
+
+	// POST /api/auction/archive — 手动归档当日竞价定格 + 晨报。
+	mux.HandleFunc("POST /api/auction/archive", func(w http.ResponseWriter, r *http.Request) {
+		if !quoteCache.Ready() {
+			errorJSON(w, 503, "行情快照尚未就绪")
+			return
+		}
+		date, err := archiveAuction(s, mv, quoteCache)
+		if err != nil {
+			errorJSON(w, 500, err.Error())
+			return
+		}
+		writeJSON(w, 200, map[string]any{"date": date, "ok": true})
+	})
+
 	// 自选股：单用户工具，无属主。watch=1 过滤 /api/profiles 已在上面支持。
 	mux.HandleFunc("GET /api/watchlist", func(w http.ResponseWriter, r *http.Request) {
 		items, err := s.WatchList(r.Context())

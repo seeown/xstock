@@ -285,6 +285,47 @@ export interface WatchItem {
   addedAt?: string
 }
 
+// 竞价异动：9:25 定格分层读数（自选/梯队/点火/异动榜 + 晨报三问）
+export interface AuctionMover {
+  symbol: string
+  name?: string
+  board?: string
+  gapPct: number
+  amt: number
+  amtCap: number
+  kind: string
+}
+
+export interface AuctionTheme {
+  concept: string
+  size: number
+  count: number
+  maxGap: number
+  stocks: AuctionMover[]
+}
+
+export interface AuctionLadderRow {
+  symbol: string
+  name: string
+  height: number
+  gapPct: number
+  amt: number
+}
+
+export interface AuctionResult {
+  asOf: string
+  phase: string
+  q1: string
+  q2: string
+  q3: string
+  stats: Record<string, number>
+  movers: AuctionMover[]
+  themes: AuctionTheme[]
+  ladder: AuctionLadderRow[]
+  watch: AuctionMover[]
+  archivedAt?: string
+}
+
 export interface ProfilePageResult {
   items: ProfileListItem[]
   total: number
@@ -460,6 +501,9 @@ export const api = {
     request<{ symbol: string; ok: boolean }>(`/api/watchlist/${encodeURIComponent(symbol)}`, { method: 'POST' }),
   watchRemove: (symbol: string) =>
     request<{ symbol: string; ok: boolean }>(`/api/watchlist/${encodeURIComponent(symbol)}`, { method: 'DELETE' }),
+  auction: () => request<AuctionResult>('/api/auction'),
+  auctionArchive: () =>
+    request<{ date: string; ok: boolean }>('/api/auction/archive', { method: 'POST' }),
   concepts: () => request<ConceptCount[]>('/api/concepts'),
   industries: () => request<string[]>('/api/industries'),
   syncState: () => request<SyncState>('/api/sync-state'),
