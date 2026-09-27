@@ -519,6 +519,14 @@ td.num, th.num { text-align: right; }
   max-height: calc(100vh - 64px);
   overflow: auto;
 }
+/* 弹窗悬浮在半透明遮罩上，卡片本身的玻璃底(5%白)会透出页面文字：
+   近实底深空色 + 毛玻璃，和 .kline-pop 同一族。双类选择器压过后置的
+   .card 背景覆盖。 */
+.card.modal-card {
+  background: rgba(13, 27, 51, 0.97);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
 .modal-facts {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -818,7 +826,11 @@ td.num, th.num { text-align: right; }
 .drawer-panel {
   position: fixed; top: 0; right: 0; bottom: 0; z-index: 41;
   width: min(520px, 92vw);
-  background: var(--panel); border-left: 1px solid var(--line-strong);
+  /* 同 .modal-card：悬浮面板要近实底，否则透出页面文字 */
+  background: rgba(13, 27, 51, 0.97);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-left: 1px solid var(--line-strong);
   box-shadow: var(--shadow);
   display: flex; flex-direction: column;
   animation: drawer-in 0.18s ease-out;
