@@ -1,16 +1,23 @@
 package market
 
-import "sort"
+import (
+	"math"
+	"sort"
+)
 
 // 市场情绪统计：全市场日线回溯逐日涨跌停家数、炸板率、最高连板、晋级
 // 率（收盘口径），叠加实时行情快照得到盘中口径。
 //
-// 口径说明（与行情软件略有差异）：
-//   - 涨停/跌停按「涨跌幅 ≥ 板块限额 − 0.2pp」的容差判定（QFQ 复权序
-//     列，见 zt.go 包注释）；历史口径不识别 ST（5% 限额），ST 的涨跌停
-//     不计入、家数略偏保守；实时口径由调用方传入 ST 感知的 pctFor。
-//   - 炸板：日内最高价触及涨停价但收盘未封；炸板率 = 炸板/(炸板+封板)。
-//   - 连板：连续收盘涨停的天数（停牌断档自然断板）；晋级 = 昨日涨停
+// 口径说明：
+//   - 实时口径用「精确涨跌停价」判定——快照价格是交易所原始价（两位
+//     小数），与四舍五入到分的涨跌停价精确比较，与行情软件/连板网口径
+//     一致（2026-09-28 曾用 ±0.2pp 容差带，把贴着跌停价未封死的票也
+//     计入，86 vs 真实 41）。
+//   - 历史口径保留容差判定——QFJ 前复权序列有舍入噪声，无法精确对价；
+//     且不识别 ST（5% 限额），ST 的涨跌停不计入、家数略偏保守。实时
+//     口径由调用方传入 ST 感知的 pctFor。
+//   - 炸板：日内最高价触及涨停价但最新价未封；炸板率 = 炸板/(炸板+封板)。
+//   - 连板：连续收盘涨停的天数（停牌档断自然断板）；晋级 = 昨日涨停
 //     （该票上一根K线）今日再封。
 
 // SentimentDay 一个交易日的情绪统计（收盘口径）。
@@ -42,6 +49,31 @@ func isLimitDown(prevClose, close, pct float64) bool {
 		return false
 	}
 	return close/prevClose*100-100 <= -(pct - limitTolerancePct)
+}
+
+// sealedLimitPrice 计算四舍五入到分的精确涨跌停价（交易所规则）。
+func sealedLimitPrice(prevClose, pct float64, up bool) float64 {
+	if up {
+		return math.Round(prevClose*(1+pct/100)*100) / 100
+	}
+	return math.Round(prevClose*(1-pct/100)*100) / 100
+}
+
+// isSealedLimitUp/Down 实时快照专用：价格是原始两位小数，与精确涨跌停
+// 价比较（0.001 为浮点容差），口径与行情软件一致。历史 QFQ 序列请用
+// isLimitUp/isLimitDown（容差版）。
+func isSealedLimitUp(prevClose, price, pct float64) bool {
+	if prevClose <= 0 || pct <= 0 || price <= 0 {
+		return false
+	}
+	return price >= sealedLimitPrice(prevClose, pct, true)-0.001
+}
+
+func isSealedLimitDown(prevClose, price, pct float64) bool {
+	if prevClose <= 0 || pct <= 0 || price <= 0 {
+		return false
+	}
+	return price <= sealedLimitPrice(prevClose, pct, false)+0.001
 }
 
 // IsDailyLimitUp 判定一根日线是否收盘涨停（server 层的板块统计用，
@@ -186,12 +218,12 @@ func ComputeSentimentRealtime(asOf, updatedAt string, quotes []RTQuote, streakAt
 		if pct <= 0 {
 			continue
 		}
-		touched := q.High > 0 && isLimitUp(q.PreClose, q.High, pct)
+		touched := q.High > 0 && isSealedLimitUp(q.PreClose, q.High, pct)
 		if touched {
 			touchedTotal++
 		}
 		switch {
-		case isLimitUp(q.PreClose, q.Price, pct):
+		case isSealedLimitUp(q.PreClose, q.Price, pct):
 			rt.LimitUp++
 			streak := streakAtEnd[q.Symbol]
 			height, promoted := streak+1, streak >= 1
@@ -207,7 +239,7 @@ func ComputeSentimentRealtime(asOf, updatedAt string, quotes []RTQuote, streakAt
 			if promoted {
 				rt.Promoted++
 			}
-		case isLimitDown(q.PreClose, q.Price, pct):
+		case isSealedLimitDown(q.PreClose, q.Price, pct):
 			rt.LimitDown++
 		case touched:
 			rt.Broke++

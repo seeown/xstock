@@ -43,3 +43,31 @@ func clipAround(b []byte, i int) []byte {
 	}
 	return b[lo:hi]
 }
+
+// 精确涨跌停价判定的边界：低价股一分钱之差必须区分（2026-09-28 口径
+// 事故的回归——昨收5.00跌停4.50，收4.51未封死，不得计入）。
+func TestSealedLimitPriceBoundaries(t *testing.T) {
+	cases := []struct {
+		name           string
+		prev, price    float64
+		pct            float64
+		wantUp, wantDn bool
+	}{
+		{"主板封死跌停", 5.00, 4.50, 10, false, true},
+		{"主板差一分未封", 5.00, 4.51, 10, false, false},
+		{"主板封死涨停", 5.00, 5.50, 10, true, false},
+		{"主板涨停差一分", 5.00, 5.49, 10, false, false},
+		{"创业20cm封死跌停", 10.00, 8.00, 20, false, true},
+		{"创业20cm未到", 10.00, 8.01, 20, false, false},
+		{"ST五厘米封死", 4.00, 3.80, 5, false, true},
+		{"四舍五入到分-昨收9.99", 9.99, 8.99, 10, false, true}, // round(9.99*0.9,2)=8.99
+	}
+	for _, c := range cases {
+		if got := isSealedLimitUp(c.prev, c.price, c.pct); got != c.wantUp {
+			t.Errorf("%s: isSealedLimitUp=%v want %v", c.name, got, c.wantUp)
+		}
+		if got := isSealedLimitDown(c.prev, c.price, c.pct); got != c.wantDn {
+			t.Errorf("%s: isSealedLimitDown=%v want %v", c.name, got, c.wantDn)
+		}
+	}
+}
