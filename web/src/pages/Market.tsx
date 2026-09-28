@@ -339,45 +339,45 @@ export default function Market() {
               <div key={t.height} className="ladder-tier">
                 <div className="tier-head">
                   <b className="tier-name">{`${t.height}进${t.height + 1}`}</b>
-                  <span className="muted">昨{t.total}只 → 晋{t.promoted.length}只</span>
+                  <span className="muted">昨{t.total}只 → 晋{t.promoted?.length ?? 0}只</span>
                   <span className={`tier-rate ${t.promoteRate >= 30 ? 'up-text' : t.promoteRate < 15 ? 'down-text' : ''}`}>
                     {pct(t.promoteRate)}
                   </span>
                 </div>
                 <div className="tier-body">
-                  {t.promoted.length > 0 && (
+                  {(t.promoted?.length ?? 0) > 0 && (
                     <div className="tier-group">
                       <em className="ok">晋级</em>
                       <span className="chips">
-                        {t.promoted.map(s => <LadderChip key={s.symbol} s={s} onPick={kline.openDetail} />)}
+                        {t.promoted!.map(s => <LadderChip key={s.symbol} s={s} onPick={kline.openDetail} />)}
                       </span>
                     </div>
                   )}
-                  {t.failed.length > 0 && (
+                  {(t.failed?.length ?? 0) > 0 && (
                     <div className="tier-group">
                       <em className="fail">失败</em>
                       <span className="chips">
-                        {t.failed.map(s => <LadderChip key={s.symbol} s={s} failed onPick={kline.openDetail} />)}
+                        {t.failed!.map(s => <LadderChip key={s.symbol} s={s} failed onPick={kline.openDetail} />)}
                       </span>
                     </div>
                   )}
                 </div>
               </div>
             ))}
-            {sent.ladder.newBoards.length > 0 && (
+            {(sent.ladder.newBoards?.length ?? 0) > 0 && (
               <div className="ladder-tier new-boards">
                 <div className="tier-head">
                   <b className="tier-name">首板</b>
-                  <span className="muted">{sent.ladder.newBoards.length} 只</span>
+                  <span className="muted">{sent.ladder.newBoards!.length} 只</span>
                 </div>
                 <div className="tier-body">
                   <span className="chips">
-                    {sent.ladder.newBoards.map(s => <LadderChip key={s.symbol} s={s} onPick={kline.openDetail} />)}
+                    {sent.ladder.newBoards!.map(s => <LadderChip key={s.symbol} s={s} onPick={kline.openDetail} />)}
                   </span>
                 </div>
               </div>
             )}
-            {!sent.ladder.tiers.length && !sent.ladder.newBoards.length && (
+            {!sent.ladder.tiers.length && !(sent.ladder.newBoards?.length ?? 0) && (
               <div className="chart-empty">昨日无连板梯队，今日暂无新晋首板</div>
             )}
           </div>

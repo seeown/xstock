@@ -177,8 +177,9 @@ export interface LadderStock {
 export interface LadderTier {
   height: number
   total: number
-  promoted: LadderStock[]
-  failed: LadderStock[]
+  // Go 空切片序列化为 null：零晋级的档位 promoted 为 null，取用须 ?.
+  promoted: LadderStock[] | null
+  failed: LadderStock[] | null
   promoteRate: number
 }
 
@@ -187,7 +188,7 @@ export interface Ladder {
   updatedAt: string
   final: boolean
   tiers: LadderTier[]
-  newBoards: LadderStock[]
+  newBoards: LadderStock[] | null
 }
 
 export interface SentimentResult {
