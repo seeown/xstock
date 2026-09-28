@@ -384,7 +384,10 @@ func (mv *marketView) guidePayload(qc *quotes.Cache) map[string]any {
 	if n := len(res.Amounts); n >= 2 {
 		yesterdayAmt = res.Amounts[n-1-(boolToInt(include))]
 	}
-	if include { // 日线已含今日：直接用历史口径
+	// 日线已含今日且指数日历确实覆盖到 asOf 时才用历史口径覆盖今日值；
+	// 指数同步失败（日历滞后于个股）时保留快照真实成交额——否则会把
+	// 日历最后一日的估算值错标成"今日"（2026-09-28 的实际事故）。
+	if include && len(res.Dates) > 0 && res.Dates[len(res.Dates)-1] == res.AsOf {
 		if n := len(res.Amounts); n > 0 {
 			todayAmt = res.Amounts[n-1]
 			amountRatioNow = amountRatioOf(n - 1)
