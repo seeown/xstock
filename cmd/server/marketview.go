@@ -561,8 +561,12 @@ func (mv *marketView) sectorsPayload(qc *quotes.Cache) map[string]any {
 			conMembers[c] = append(conMembers[c], p.Symbol)
 		}
 	}
-	ind := append([]SectorRow(nil), res.Industries...)
-	con := append([]SectorRow(nil), res.Concepts...)
+	// make 基底：启动空窗期 res.Industries 为 nil，append(nil) 会把 null
+	// 发给前端；空板块列表应序列化为 []。
+	ind := make([]SectorRow, 0, len(res.Industries))
+	ind = append(ind, res.Industries...)
+	con := make([]SectorRow, 0, len(res.Concepts))
+	con = append(con, res.Concepts...)
 	overlayRealtime(ind, indMembers, snap, pf)
 	overlayRealtime(con, conMembers, snap, pf)
 	if len(con) > 30 {

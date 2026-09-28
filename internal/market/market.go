@@ -126,7 +126,8 @@ func ValidParams(p NParams) error {
 // FindNSignals identifies: rising leg -> lower-volume pullback -> volume-backed breakout.
 // A signal is emitted at the breakout close; the backtest enters at the next open.
 func FindNSignals(symbol string, bars []Candle, p NParams) []Signal {
-	var out []Signal
+	// make 基底：空结果序列化为 [] 而非 null（前端类型约定非空）。
+	out := make([]Signal, 0, 8)
 	if ValidParams(p) != nil {
 		return out
 	}
@@ -216,7 +217,7 @@ func BacktestFromSignals(symbol string, bars []Candle, signals []Signal, x ExitP
 	for _, s := range signals {
 		byDate[s.Date] = true
 	}
-	result := BacktestResult{Signals: signals}
+	result := BacktestResult{Signals: signals, Trades: []Trade{}}
 	cash, peak, maxDD := initialCash, initialCash, 0.0
 	for i := 1; i < len(bars); {
 		// Yesterday's close signal is the only information used for today's entry.

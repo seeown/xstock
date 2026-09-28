@@ -55,12 +55,15 @@ func BuildLadder(asOf, updatedAt string, quotes []RTQuote, streakYesterday map[s
 		}
 	}
 
-	lad := Ladder{AsOf: asOf, UpdatedAt: updatedAt, Final: final}
+	// 所有列表字段 make 基底：空档/零晋级序列化为 [] 而非 null——
+	// 前端按非空数组消费，null 会让整页渲染崩溃（2026-09-28 的线上教训）。
+	lad := Ladder{AsOf: asOf, UpdatedAt: updatedAt, Final: final,
+		Tiers: []LadderTier{}, NewBoards: []LadderStock{}}
 	tiers := map[int]*LadderTier{}
 	tier := func(h int) *LadderTier {
 		t := tiers[h]
 		if t == nil {
-			t = &LadderTier{Height: h}
+			t = &LadderTier{Height: h, Promoted: []LadderStock{}, Failed: []LadderStock{}}
 			tiers[h] = t
 		}
 		return t

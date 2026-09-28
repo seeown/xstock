@@ -156,7 +156,8 @@ func WindowStart(bars []Candle, days int) string {
 // FindNPatterns 全市场扫描：返回截至序列末端仍存活的 N 字形态。
 // panicDay 由调用方注入（指数单日跌幅 ≥1.5% 的交易日），nil 视为无恐慌日。
 func FindNPatterns(symbol string, bars []Candle, p NPParams, panicDay func(string) bool) []NPSetup {
-	var out []NPSetup
+	// make 基底：空结果序列化为 [] 而非 null（前端类型约定非空）。
+	out := make([]NPSetup, 0, 8)
 	if ValidNPParams(p) != nil || len(bars) == 0 {
 		return out
 	}

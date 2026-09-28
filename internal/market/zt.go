@@ -186,7 +186,8 @@ func (p FirstBoardParams) exits() ExitParams {
 //     视为连板结构；
 //   - 突破日：收盘越过回看窗口与首板日的最高价，量比在 [min,max]。
 func FindFirstBoardSignals(symbol string, bars []Candle, p FirstBoardParams) []Signal {
-	var out []Signal
+	// make 基底：空结果序列化为 [] 而非 null（前端类型约定非空）。
+	out := make([]Signal, 0, 8)
 	if ValidFirstBoardParams(p) != nil {
 		return out
 	}
