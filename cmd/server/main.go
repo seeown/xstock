@@ -57,6 +57,20 @@ func liveFetch(key string, ttl time.Duration, fetch func() (any, error)) (any, e
 	liveMu.Unlock()
 	v, err := fetch()
 	if err != nil {
+		// TDX 服务器间歇性限流/超时（实测每次约 8 秒自愈）：
+		// 稍候自动重试一次，再失败就回退到 10 分钟内的上次成功结果——
+		// 分时/周期K宁可陈旧一分钟，不给前端甩空态。
+		time.Sleep(400 * time.Millisecond)
+		v, err = fetch()
+	}
+	if err != nil {
+		liveMu.Lock()
+		if e, ok := liveStore[key]; ok && time.Since(e.at) < 10*time.Minute {
+			liveMu.Unlock()
+			log.Printf("liveFetch %s 拉取失败，回退 %s 前的缓存: %v", key, time.Since(e.at).Round(time.Second), err)
+			return e.value, nil
+		}
+		liveMu.Unlock()
 		return nil, err
 	}
 	liveMu.Lock()
