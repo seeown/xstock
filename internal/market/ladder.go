@@ -50,7 +50,7 @@ func BuildLadder(asOf, updatedAt string, quotes []RTQuote, streakYesterday map[s
 			continue
 		}
 		today[q.Symbol] = status{
-			sealed: isSealedLimitUp(q.PreClose, q.Price, pct),
+			sealed: sealedUpGuarded(q.PreClose, q.Price, pct),
 			chg:    (q.Price/q.PreClose - 1) * 100,
 		}
 	}

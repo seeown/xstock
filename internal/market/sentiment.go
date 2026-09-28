@@ -76,6 +76,26 @@ func isSealedLimitDown(prevClose, price, pct float64) bool {
 	return price <= sealedLimitPrice(prevClose, pct, false)+0.001
 }
 
+// sealedUpGuarded/sealedDownGuarded：精确价匹配 + round 理论带守卫。
+// 真实封板的价格必然落在「限额 ± 四舍五入到分的偏差带」内；带外命中
+// 说明涨跌幅限制的假设错了（ST 摘帽后档案名称陈旧、仍按 5% 判；或除权
+// 昨收基准失真），按数据杂音剔除，不计数。
+func sealedUpGuarded(prevClose, price, pct float64) bool {
+	if !isSealedLimitUp(prevClose, price, pct) {
+		return false
+	}
+	chg := (price/prevClose - 1) * 100
+	return math.Abs(chg-pct) <= 0.006/prevClose*100+0.06
+}
+
+func sealedDownGuarded(prevClose, price, pct float64) bool {
+	if !isSealedLimitDown(prevClose, price, pct) {
+		return false
+	}
+	chg := (price/prevClose - 1) * 100
+	return math.Abs(chg+pct) <= 0.006/prevClose*100+0.06
+}
+
 // IsDailyLimitUp 判定一根日线是否收盘涨停（server 层的板块统计用，
 // 口径同 SentimentHistory）。
 func IsDailyLimitUp(prevClose, close, pct float64) bool {
@@ -218,12 +238,12 @@ func ComputeSentimentRealtime(asOf, updatedAt string, quotes []RTQuote, streakAt
 		if pct <= 0 {
 			continue
 		}
-		touched := q.High > 0 && isSealedLimitUp(q.PreClose, q.High, pct)
+		touched := q.High > 0 && sealedUpGuarded(q.PreClose, q.High, pct)
 		if touched {
 			touchedTotal++
 		}
 		switch {
-		case isSealedLimitUp(q.PreClose, q.Price, pct):
+		case sealedUpGuarded(q.PreClose, q.Price, pct):
 			rt.LimitUp++
 			streak := streakAtEnd[q.Symbol]
 			height, promoted := streak+1, streak >= 1
@@ -239,7 +259,7 @@ func ComputeSentimentRealtime(asOf, updatedAt string, quotes []RTQuote, streakAt
 			if promoted {
 				rt.Promoted++
 			}
-		case isSealedLimitDown(q.PreClose, q.Price, pct):
+		case sealedDownGuarded(q.PreClose, q.Price, pct):
 			rt.LimitDown++
 		case touched:
 			rt.Broke++

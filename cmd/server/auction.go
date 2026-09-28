@@ -96,13 +96,14 @@ func aucExcluded(concept string) bool {
 	return false
 }
 
-// limitCapByBoard 涨停幅度：主板 10%、创业/科创 20%、ST 5%。
+// limitCapByBoard 涨停幅度：主板 10%、创业/科创 20%、主板 ST 5%
+// （创业/科创的 ST 注册制后同为 20%，按 5% 判会大面积误判）。
 func limitCapByBoard(board, name string) float64 {
 	cap := 0.10
 	if strings.Contains(board, "创业板") || strings.Contains(board, "科创板") {
 		cap = 0.20
 	}
-	if strings.Contains(strings.ToUpper(name), "ST") {
+	if cap == 0.10 && strings.Contains(strings.ToUpper(name), "ST") {
 		cap = 0.05
 	}
 	return cap

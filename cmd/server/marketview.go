@@ -466,7 +466,8 @@ func overlayRealtime(rows []SectorRow, members map[string][]string, snap map[str
 }
 
 // pctFor 构建 ST 感知的涨停幅度函数（实时口径用；历史口径无法追溯 ST
-// 状态，保持偏保守）。
+// 状态，保持偏保守）。ST 5% 仅限主板——创业板/科创板注册制后 ST 同为
+// 20%，按 5% 判会把跌 5~9% 的创业/科创 ST 全部误判成跌停。
 func pctFor(profiles []store.Profile) func(string) float64 {
 	names := make(map[string]string, len(profiles))
 	for _, p := range profiles {
@@ -474,10 +475,13 @@ func pctFor(profiles []store.Profile) func(string) float64 {
 	}
 	today := time.Now().Format("2006-01-02")
 	return func(symbol string) float64 {
-		if n, ok := names[symbol]; ok && strings.Contains(strings.ToUpper(n), "ST") {
-			return 5
+		base := market.LimitUpPct(symbol, today)
+		if base == 10 {
+			if n, ok := names[symbol]; ok && strings.Contains(strings.ToUpper(n), "ST") {
+				return 5
+			}
 		}
-		return market.LimitUpPct(symbol, today)
+		return base
 	}
 }
 
