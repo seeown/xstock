@@ -49,6 +49,12 @@ export default function Watchlist() {
     return () => window.clearInterval(t)
   }, [isActiveView, load])
 
+  // 激活即重拉：保活壳里首次加载若撞上服务重启挂起，「正在加载」会永久楔死，
+  // 每次切回本页立即重新加载可自愈（与情绪指南/大盘页同款模式）。
+  useEffect(() => {
+    if (isActiveView) void load()
+  }, [isActiveView, load])
+
   // 自选集合变化（别处加/移）时立即重拉名单
   useEffect(() => {
     if (isActiveView) void load()
