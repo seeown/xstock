@@ -732,69 +732,47 @@ func main() {
 
 	mux.HandleFunc("GET /api/screen", func(w http.ResponseWriter, r *http.Request) {
 		days := queryInt(r, "days", 10)
-		p := market.DefaultNPParams()
-		// 恐慌日集合：从上证指数日线计算（单日跌幅 ≥1.5%）。
-		panicDays := map[string]bool{}
-		if idx := s.Bars("000001.SH"); len(idx) > 1 {
-			for i := 1; i < len(idx); i++ {
-				if prev := idx[i-1].Close; prev > 0 && (idx[i].Close/prev-1)*100 <= -1.5 {
-					panicDays[idx[i].Date] = true
-				}
-			}
-		}
-		isPanic := func(date string) bool { return panicDays[date] }
-		type screenItem struct {
-			market.NPSetup
-			Name     string `json:"name"`
-			Industry string `json:"industry,omitempty"`
-			sortKey  string
-		}
-		items := make([]screenItem, 0, 64)
-		counts := map[string]int{"b1": 0, "b2": 0, "b3": 0}
-		asOf := ""
-		for _, info := range s.Symbols() {
-			sym := info.Symbol
-			bars := ov.Bars(s, sym) // 筛查含今日实时bar（盘中也能看到今天形成的形态）
-			if len(bars) < 60 {
-				continue // 上市过新：MA20/量比前置不足
-			}
-			prof, hasProf := s.Profile(sym)
-			if hasProf && strings.Contains(strings.ToUpper(prof.Name), "ST") {
-				continue // ST 5% 限额无法按日线识别，整体排除
-			}
-			if strings.HasSuffix(sym, ".BJ") {
-				continue // 北交所：流动性口径外，排除
-			}
-			start := market.WindowStart(bars, days)
-			for _, setup := range market.FindNPatterns(sym, bars, p, isPanic) {
-				// b1 形态在状态机里已保证企稳触发（KeyDate 即触发日）。
-				key := setup.KeyDate
-				if setup.Stage == "b1" {
-					key = setup.B1TriggerDate
-				}
-				if start != "" && key < start {
-					continue
-				}
-				counts[setup.Stage]++
-				it := screenItem{NPSetup: setup, sortKey: key}
-				if hasProf {
-					it.Name, it.Industry = prof.Name, prof.Industry
-				}
-				items = append(items, it)
-				if setup.AsOf > asOf {
-					asOf = setup.AsOf
-				}
-			}
-		}
-		sort.Slice(items, func(i, j int) bool {
-			if items[i].sortKey != items[j].sortKey {
-				return items[i].sortKey > items[j].sortKey
-			}
-			return items[i].Symbol < items[j].Symbol
-		})
+		asOf, counts, items, _ := scanScreen(s, ov, days)
 		writeJSON(w, 200, map[string]any{
 			"asOf": asOf, "windowDays": days, "counts": counts, "items": items,
 		})
+	})
+
+	// POST /api/screen/archive — 立即归档：服务端现扫全市场（与筛查同口径，
+	// 含今日实时bar），以数据基准日为归档日全量替换入库（重复归档以最后为准）。
+	mux.HandleFunc("POST /api/screen/archive", func(w http.ResponseWriter, r *http.Request) {
+		res, err := archiveScreenNow(r, s, ov)
+		if err != nil {
+			errorJSON(w, 500, err.Error())
+			return
+		}
+		writeJSON(w, 200, res)
+	})
+
+	// GET /api/screen/archives — 归档日期列表（近 → 远）。
+	mux.HandleFunc("GET /api/screen/archives", func(w http.ResponseWriter, r *http.Request) {
+		dates, err := s.ListScreenArchiveDates(r.Context())
+		if err != nil {
+			errorJSON(w, 500, err.Error())
+			return
+		}
+		writeJSON(w, 200, dates)
+	})
+
+	// GET /api/screen/archive?date= — 某日归档形态 + 买点日/价与
+	// T+1/T+5/T+10/期间最高（从日线动态计算，不落库）。
+	mux.HandleFunc("GET /api/screen/archive", func(w http.ResponseWriter, r *http.Request) {
+		date := r.URL.Query().Get("date")
+		if date == "" {
+			errorJSON(w, 400, "missing date")
+			return
+		}
+		items, counts, err := archivedScreenOfDay(r, s, ov, date)
+		if err != nil {
+			errorJSON(w, 500, err.Error())
+			return
+		}
+		writeJSON(w, 200, map[string]any{"date": date, "counts": counts, "items": items})
 	})
 
 	static, err := fs.Sub(distFS, "web/dist")

@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent, KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, type Quote, type ScreenResult, type NPSetup, type GuideRealtime } from '../api'
+import { api, type Quote, type ScreenResult, type NPSetup, type GuideRealtime, type ArchivedSetup, type ScreenArchiveDay } from '../api'
 import { KlineDetailModal, KlinePopover, useKlinePreview } from '../components/klinePreview'
 import { Button, Card, EnvBanner, Chip, SearchPill, FilterBar, EmptyState, ErrorBlock, KpiCard, Skeleton, fmt, pct, type EnvTone } from '../components/ui'
 import { useQueryState } from '../hooks/useQueryState'
@@ -44,6 +44,11 @@ export default function Screen() {
   const [guide, setGuide] = useState<GuideRealtime | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [sel, setSel] = useState(-1)
+  // 形态归档：日期列表 + 当前查看的归档日（null=实时模式）
+  const [archDates, setArchDates] = useState<string[]>([])
+  const [archDay, setArchDay] = useState<ScreenArchiveDay | null>(null)
+  const [archiving, setArchiving] = useState(false)
+  const [archNote, setArchNote] = useState('')
 
   // 筛选状态进 URL：可分享、可回退（stage / 搜索词）
   const [stageParam, setStageParam] = useQueryState('stage')
@@ -65,11 +70,35 @@ export default function Screen() {
       .finally(() => setRunning(false))
   }
 
-  // 挂载即扫一次 + 顺带取大盘温度（横幅）；失败静默降级为无横幅。
+  // 挂载即扫一次 + 顺带取大盘温度（横幅）与归档日期列表；失败静默。
   useEffect(() => {
     run(days)
     api.marketGuide().then(g => setGuide(g.realtime)).catch(() => {})
+    api.screenArchiveDates().then(setArchDates).catch(() => {})
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---- 形态归档 ----
+  const doArchive = () => {
+    setArchiving(true)
+    setArchNote('')
+    api.screenArchive()
+      .then(r => {
+        setArchNote(`已归档 ${r.date}：B1×${r.counts.b1 ?? 0} · B2×${r.counts.b2 ?? 0} · B3×${r.counts.b3 ?? 0}（共 ${r.total} 只）`)
+        return api.screenArchiveDates()
+      })
+      .then(setArchDates)
+      .catch(e => setArchNote(`归档失败：${e instanceof Error ? e.message : '未知错误'}`))
+      .finally(() => setArchiving(false))
+  }
+  const loadArch = (date: string) => {
+    setArchDay(null)
+    setError('')
+    api.screenArchiveOfDay(date)
+      .then(setArchDay)
+      .catch(e => setError(e instanceof Error ? e.message : '读取归档失败'))
+  }
+  const openArchDetail = (a: ArchivedSetup) =>
+    kline.openDetail({ symbol: a.symbol, name: a.name, key: a.keyDate, setup: a, buyDate: a.buyDate })
 
   const q = qParam.trim().toLowerCase()
   const items = useMemo(() => {
@@ -83,6 +112,14 @@ export default function Screen() {
     () => items.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
     [items, safePage],
   )
+
+  // 归档视图的行列表：同一阶段 tab / 搜索词过滤，与实时视图一致。
+  const archItems = useMemo(() => {
+    if (!archDay) return []
+    const all = archDay.items.filter(i => inTab(i, tab))
+    if (!q) return all
+    return all.filter(i => i.symbol.toLowerCase().includes(q) || (i.name ?? '').toLowerCase().includes(q))
+  }, [archDay, tab, q])
 
   // 当前页的实时行情（现价/当日涨跌），行情缓存未就绪时静默留空。
   const quoteKey = useMemo(() => pageItems.map(i => i.symbol).join(','), [pageItems])
@@ -123,7 +160,7 @@ export default function Screen() {
     el?.scrollIntoView({ block: 'nearest' })
   }, [sel])
 
-  const tabCount = (key: Stage) => (result?.items ?? []).filter(i => inTab(i, key)).length
+  const tabCount = (key: Stage) => (archDay?.items ?? result?.items ?? []).filter(i => inTab(i, key)).length
 
   const quoteCell = (s: NPSetup) => {
     const qt = quotes[s.symbol]
@@ -137,6 +174,11 @@ export default function Screen() {
       </>
     )
   }
+
+  // 归档视图的涨跌幅单元格：null（窗口未走完）显示 —
+  const pctTd = (v: number | null) => v == null
+    ? <td className="num muted">—</td>
+    : <td className={`num ${v >= 0 ? 'up-text' : 'down-text'}`}>{v >= 0 ? '+' : ''}{v.toFixed(2)}%</td>
 
   // 行展开：三段明细（形态结构 / 量能结构 / 关键价位）——可解释性契约
   const ExpandRow = ({ s }: { s: NPSetup }) => (
@@ -202,7 +244,8 @@ export default function Screen() {
 
   const meta = stageTabs.find(t => t.key === tab)!
   const env = envOf(guide)
-  const c = result?.counts
+  // 归档视图优先展示归档日计数；无归档时是实时扫描计数。
+  const c = archDay?.counts ?? result?.counts
 
   return (
     <div className="page">
@@ -253,10 +296,68 @@ export default function Screen() {
               </Chip>
             ))}
             <SearchPill ref={searchRef} className="push-right" value={qParam} onChange={e => { setQParam(e.target.value || null); setPage(1); setSel(-1) }} />
+            <Button variant="ghost" onClick={doArchive} disabled={archiving}>{archiving ? '归档中…' : '立即归档'}</Button>
+            <select
+              className="select-pill native"
+              value={archDay?.date ?? ''}
+              onChange={e => e.target.value ? loadArch(e.target.value) : setArchDay(null)}
+            >
+              <option value="">查看归档{archDates.length ? `（${archDates.length}）` : ''}</option>
+              {archDates.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
           </FilterBar>
           <p className="stage-note">{meta.sub}</p>
 
-          {pageItems.length ? (
+          {archNote && <div className="arch-note">{archNote}</div>}
+          {archDay && (
+            <div className="arch-banner">
+              <b>正在查看 {archDay.date} 归档</b>
+              <span className="muted-c">共 {archDay.items.length} 只（B1×{archDay.counts.b1 ?? 0} · B2×{archDay.counts.b2 ?? 0} · B3×{archDay.counts.b3 ?? 0}）· 买点起算 T+N</span>
+              <Button variant="mini" onClick={() => setArchDay(null)}>返回实时</Button>
+            </div>
+          )}
+
+          {archDay ? (
+            <div className="table-panel">
+              <div className="table-wrap" onScroll={kline.leaveRow}>
+                {archItems.length ? (
+                  <table className="tb">
+                    <thead>
+                      <tr>
+                        <th>代码 / 名称</th><th>阶段</th><th>买点日</th><th className="num">买点价</th>
+                        <th className="num">T+1</th><th className="num">T+5</th><th className="num">T+10</th>
+                        <th className="num">期间最高</th><th className="num">止损</th><th className="num">目标</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {archItems.map(a => (
+                        <tr
+                          key={a.symbol + a.keyDate}
+                          className="rowlink"
+                          onClick={() => openArchDetail(a)}
+                          onMouseEnter={e => kline.enterRow({ symbol: a.symbol, name: a.name, key: a.keyDate, setup: a }, e.currentTarget)}
+                          onMouseLeave={kline.leaveRow}
+                        >
+                          <td><span className="code">{a.symbol}</span> <span className="name">{a.name ?? ''}</span></td>
+                          <td><span className={`concept-chip${a.stage === 'b2' ? ' board-chip' : ''}`}>{a.stage.toUpperCase()}</span></td>
+                          <td className="mono">{a.buyDate}</td>
+                          <td className="num">{a.buyPrice != null ? fmt(a.buyPrice) : '—'}</td>
+                          {pctTd(a.t1)}
+                          {pctTd(a.t5)}
+                          {pctTd(a.t10)}
+                          {pctTd(a.hi)}
+                          <td className="num">{fmt(a.stopLoss)}</td>
+                          <td className="num">{fmt(a.target)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div className="chart-empty">该日无 {meta.short} 阶段形态</div>
+                )}
+              </div>
+            </div>
+          ) : pageItems.length ? (
             <div className="table-panel">
               <div className="table-wrap" onScroll={kline.leaveRow}>
                 {tab === 'b1' && (

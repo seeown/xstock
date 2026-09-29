@@ -403,6 +403,24 @@ export interface SyncState {
   newListings: number
 }
 
+// 形态归档：每日筛查定格快照 + 买点后续走势（T+N 从买点日收盘动态计算）。
+export interface ArchivedSetup extends NPSetup {
+  name?: string
+  industry?: string
+  buyDate: string
+  buyPrice: number | null
+  t1: number | null
+  t5: number | null
+  t10: number | null
+  hi: number | null
+}
+
+export interface ScreenArchiveDay {
+  date: string
+  counts: Record<string, number>
+  items: ArchivedSetup[]
+}
+
 export interface ProfileQuery {
   q?: string
   board?: string
@@ -511,6 +529,11 @@ export const api = {
   industries: () => request<string[]>('/api/industries'),
   syncState: () => request<SyncState>('/api/sync-state'),
   screen: (days: number) => request<ScreenResult>(`/api/screen?days=${days}`),
+  screenArchive: () =>
+    request<{ date: string; counts: Record<string, number>; total: number }>('/api/screen/archive', { method: 'POST' }),
+  screenArchiveDates: () => request<string[]>('/api/screen/archives'),
+  screenArchiveOfDay: (date: string) =>
+    request<ScreenArchiveDay>(`/api/screen/archive?date=${date}`),
   quotes: (symbols: string[]) =>
     request<Quote[]>(`/api/quotes?symbols=${encodeURIComponent(symbols.join(','))}`),
 }

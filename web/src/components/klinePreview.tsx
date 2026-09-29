@@ -27,6 +27,8 @@ export interface KlineTarget {
   key?: string
   /** 命中筛查形态时带上，预览/弹窗画出形态标注 */
   setup?: NPSetup
+  /** 买点日（归档形态）：弹窗K线上画「买」徽章 */
+  buyDate?: string
   /** 无形态时弹窗副标题（如板块·行业） */
   sub?: string
 }
@@ -264,7 +266,7 @@ export function KlineDetailModal({ state, onClose, onOpenBacktest }: {
           state.bars === null
             ? <Spinner text="加载K线…" />
             : state.bars.length
-              ? <MiniKline bars={setupWindow(state.bars, s)} setup={s} height={420} />
+              ? <MiniKline bars={setupWindow(state.bars, s)} setup={s} buyDate={state.buyDate} height={420} />
               : <div className="chart-empty">该股未同步日K · 可切换分时 / 周K / 月K / 年K 查看，或到档案抽屉点「同步日K」</div>
         ) : coarseBars ? (
           <MiniKline bars={coarseBars} height={420} />

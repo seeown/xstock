@@ -135,6 +135,13 @@ function ensureZtMark() {
           { type: 'text', attrs: { x: c.x, y: cy + size + 3, text: d.label || '突破', align: 'center', baseline: 'top' }, styles: plainText(d.color), ignoreEvent: true },
         ]
       }
+      if (d.kind === 'buy') {
+        // 买点徽章：实底圆角块 + 白字「买」，醒目区别于其他形态标记
+        return [
+          { type: 'rect', attrs: { x: c.x - 9.5, y: c.y + 5, width: 19, height: 15 }, styles: { style: 'fill', color: d.color, borderColor: 'transparent', borderSize: 0, borderRadius: 4 }, ignoreEvent: true },
+          { type: 'text', attrs: { x: c.x, y: c.y + 12.5, text: '买', align: 'center', baseline: 'middle' }, styles: { ...plainText('#ffffff', 10), weight: 'bold' }, ignoreEvent: true },
+        ]
+      }
       // star
       return [
         { type: 'text', attrs: { x: c.x, y: c.y + 5, text: '★', align: 'center', baseline: 'top' }, styles: { ...plainText(d.color, 12), weight: 'bold' }, ignoreEvent: true },
@@ -154,10 +161,12 @@ export function setupWindow(bars: Candle[], setup?: NPSetup): Candle[] {
 }
 
 export default function MiniKline({
-  bars, setup, height = 280,
+  bars, setup, buyDate, height = 280,
 }: {
   bars: Candle[]
   setup?: NPSetup
+  /** 买点日（归档形态的买点标记）：B1=企稳触发日，B2=突破日，B3=回踩确认日 */
+  buyDate?: string
   height?: number
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
@@ -255,6 +264,17 @@ export default function MiniKline({
       if (setup.b1Triggered && setup.b1TriggerDate) mark(setup.b1TriggerDate, 'star', ORANGE)
       if (setup.retestDate) mark(setup.retestDate, 'star', GOLD)
     }
+    // 买点徽章：归档视图的买入基准日，红底白「买」
+    if (buyDate) {
+      const bar = byDate.get(buyDate)
+      if (bar) {
+        chart.createOverlay({
+          name: 'ztmark',
+          points: [{ timestamp: Date.parse(buyDate), value: bar.low }],
+          extendData: { kind: 'buy', color: '#ff5f7a' },
+        })
+      }
+    }
 
     // 适配窗口宽度：整段窗口撑满画布，右端对齐最新K线。
     const width = el.clientWidth || 560
@@ -263,7 +283,7 @@ export default function MiniKline({
 
     return () => { dispose(el) }
     // setup 字段变化即重建（同一弹窗内不会高频变化，重建成本低）。
-  }, [bars, setup])
+  }, [bars, setup, buyDate])
 
   return <div ref={hostRef} style={{ width: '100%', height }} />
 }
