@@ -23,6 +23,16 @@ import (
 // sectorWindow 等权指数与逐日涨停的回看窗口（交易日）。
 const sectorWindow = 60
 
+// indexSymbols 大盘指数代码集。快照名单已含四个指数（为了实时bar叠加），
+// 个股口径的统计（涨跌家数/情绪/竞价/量能）必须把它们排除。
+var indexSymbols = func() map[string]bool {
+	m := make(map[string]bool, len(tdx.IndexDefs))
+	for _, def := range tdx.IndexDefs {
+		m[def.Symbol] = true
+	}
+	return m
+}()
+
 // SectorRow 板块一行的静态部分（收盘口径）；实时字段由 handler 覆盖。
 type SectorRow struct {
 	Name          string    `json:"name"`
@@ -318,6 +328,9 @@ func (mv *marketView) guidePayload(qc *quotes.Cache) map[string]any {
 	// 今日实时量能与广度（快照精确值）
 	todayAmt, upNow, downNow, cnt, retSum := 0.0, 0, 0, 0, 0.0
 	for _, q := range snap {
+		if indexSymbols[q.Symbol] {
+			continue // 大盘指数：只喂叠加层，不进个股口径统计
+		}
 		if q.Price <= 0 || q.PreClose <= 0 {
 			continue
 		}
@@ -425,6 +438,9 @@ func (mv *marketView) sentimentRealtimeOf(res *mvResult, snap map[string]tdx.Quo
 	pf := pctFor(profiles)
 	quotes := make([]market.RTQuote, 0, len(snap))
 	for _, q := range snap {
+		if indexSymbols[q.Symbol] {
+			continue // 大盘指数：只喂叠加层，不进个股口径统计
+		}
 		quotes = append(quotes, market.RTQuote{Symbol: q.Symbol, Price: q.Price, PreClose: q.PreClose, High: q.High,
 			Bid1: q.Bid1, BidVol1: q.BidVol1, Ask1: q.Ask1, AskVol1: q.AskVol1})
 	}
@@ -510,6 +526,9 @@ func (mv *marketView) sentimentPayload(qc *quotes.Cache) map[string]any {
 	snap := qc.Snapshot()
 	quotes := make([]market.RTQuote, 0, len(snap))
 	for _, q := range snap {
+		if indexSymbols[q.Symbol] {
+			continue // 大盘指数：只喂叠加层，不进个股口径统计
+		}
 		quotes = append(quotes, market.RTQuote{Symbol: q.Symbol, Price: q.Price, PreClose: q.PreClose, High: q.High,
 			Bid1: q.Bid1, BidVol1: q.BidVol1, Ask1: q.Ask1, AskVol1: q.AskVol1})
 	}

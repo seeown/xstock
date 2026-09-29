@@ -117,14 +117,18 @@ func main() {
 	defer quoteCache.Close()
 
 	// 今日实时bar叠加层：快照每刷一轮就重建（合成今日K线 + 锚定校验），
-	// 收盘后由 archiveToday 落库。回测不经过叠加层。
+	// 收盘后由 archiveToday 落库。回测不经过叠加层。快照名单含四个大盘
+	// 指数——指数与个股同一链路拿到今日实时bar（大盘页KPI/日K全天实时）。
 	ov := newOverlay()
 	go func() {
 		quoteCache.Run(context.Background(), func() []string {
 			all := s.AllProfiles()
-			syms := make([]string, 0, len(all))
+			syms := make([]string, 0, len(all)+len(tdx.IndexDefs))
 			for _, p := range all {
 				syms = append(syms, p.Symbol)
+			}
+			for _, def := range tdx.IndexDefs {
+				syms = append(syms, def.Symbol)
 			}
 			return syms
 		}, time.Minute)
@@ -440,7 +444,8 @@ func main() {
 		out := make([]indexView, 0, len(tdx.IndexDefs))
 		for _, def := range tdx.IndexDefs {
 			v := indexView{Symbol: def.Symbol, Name: def.Name}
-			if bars := s.Bars(def.Symbol); len(bars) > 0 {
+			// 叠加层口径：盘中 lastDate 即今日（含实时bar），收盘落库后一致。
+			if bars := ov.Bars(s, def.Symbol); len(bars) > 0 {
 				v.Count = len(bars)
 				v.FirstDate = bars[0].Date
 				v.LastDate = bars[len(bars)-1].Date

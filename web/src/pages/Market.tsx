@@ -38,7 +38,6 @@ export default function Market() {
   const [barsCache, setBarsCache] = useState<Record<string, Candle[]>>({})
   const [range, setRange] = useState<RangeKey>('250')
   const [loading, setLoading] = useState(false)
-  const [syncing, setSyncing] = useState(false)
   const [feedback, setFeedback] = useState<{ text: string; kind: 'info' | 'error' | 'success' }>({ text: '', kind: 'info' })
   const [sent, setSent] = useState<SentimentResult | null>(null)
   const [sectors, setSectors] = useState<SectorsResult | null>(null)
@@ -130,34 +129,14 @@ export default function Market() {
     }
   }, [])
 
-  const syncIndex = useCallback(async (symbol: string, name: string, silent = false) => {
-    setSyncing(true)
-    if (!silent) setFeedback({ text: `正在拉取 ${name} 日K数据…`, kind: 'info' })
-    try {
-      const r = await api.sync(symbol)
-      const bars = await loadBars(symbol)
-      setIndices(prev => prev.map(i => i.symbol === symbol ? { ...i, count: r.count, firstDate: r.firstDate, lastDate: r.lastDate } : i))
-      setFeedback({ text: `${name} 已更新：${r.count} 根日K（${r.firstDate} ~ ${r.lastDate}）。`, kind: 'success' })
-      return bars
-    } catch (e) {
-      setFeedback({ text: `${name} 同步失败：${e instanceof Error ? e.message : '未知错误'}`, kind: 'error' })
-      return []
-    } finally {
-      setSyncing(false)
-    }
-  }, [loadBars])
-
   const selectIndex = useCallback(async (info: IndexInfo) => {
     setActive(info.symbol)
     setFeedback({ text: '', kind: 'info' })
     setLoading(true)
-    let bars = await loadBars(info.symbol)
-    if (!bars.length) {
-      bars = await syncIndex(info.symbol, info.name, true)
-    }
-    if (!bars.length) setFeedback({ text: `${info.name} 暂无本地数据，请点击「同步日K」拉取。`, kind: 'error' })
+    const bars = await loadBars(info.symbol)
+    if (!bars.length) setFeedback({ text: `${info.name} 暂无本地日线（收盘后自动同步入库）。`, kind: 'error' })
     setLoading(false)
-  }, [loadBars, syncIndex])
+  }, [loadBars])
 
   useEffect(() => {
     ;(async () => {
@@ -201,11 +180,6 @@ export default function Market() {
           <h1>大盘行情</h1>
           <p>上证指数 · 深证成指 · 创业板指 · 科创50 · 分时 / 日K / 周K / 月K / 年K，均线随周期计算</p>
         </div>
-        {activeInfo && (
-          <button className="btn2" onClick={() => syncIndex(activeInfo.symbol, activeInfo.name)} disabled={syncing}>
-            {syncing ? '同步中…' : '同步日K'}
-          </button>
-        )}
       </header>
 
       <Banner text={feedback.text} kind={feedback.kind} />
@@ -216,7 +190,6 @@ export default function Market() {
             key={i.symbol}
             className={`index-tab${active === i.symbol ? ' active' : ''}`}
             onClick={() => selectIndex(i)}
-            disabled={syncing}
           >
             <b>{i.name}</b>
             <span>{i.lastDate ? `更新至 ${i.lastDate}` : '未同步'}</span>
@@ -227,7 +200,7 @@ export default function Market() {
       {stats && (
         <div className="kpis">
           <KpiCard
-            label="最新收盘"
+            label="最新"
             value={fmt(stats.close)}
             hint={<span className={stats.change >= 0 ? 'up-text' : 'down-text'}>今日 {stats.change >= 0 ? '+' : ''}{pct(stats.change)}</span>}
           />

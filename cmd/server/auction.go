@@ -204,6 +204,9 @@ func computeAuction(s *store.Store, mv *marketView, qc *quotes.Cache) (*AuctionR
 	gapUp5 := []AuctionMover{}
 	limitOpen, upCnt, downCnt := 0, 0, 0
 	for sym, q := range snap {
+		if indexSymbols[sym] {
+			continue // 大盘指数：只喂叠加层，不进个股口径统计
+		}
 		prof, has := profiles[sym]
 		if q.Price > 0 && q.PreClose > 0 {
 			if g := (q.Price/q.PreClose - 1) * 100; g > 0 {
