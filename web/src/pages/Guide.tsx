@@ -112,9 +112,14 @@ function LineChart({
             <text x={W - M.right + 8} y={M.top + ih * f + 4} fontSize="11" fill="#7E96B5">{fmtNum(rs.max - (rs.max - rs.min) * f)}</text>
           </g>
         ))}
-        {labels.map((d, i) => (i % Math.ceil(n / 8) === 0 || i === n - 1) && (
-          <text key={d} x={x(i)} y={H - 8} textAnchor="middle" fontSize="11" fill="#7E96B5">{d.slice(5)}</text>
-        ))}
+        {labels.map((d, i) => {
+          // 每步长一个刻度 + 恒显末位；末位附近的常规刻度让位，避免挤叠（如 09-28/09-29）
+          const step = Math.ceil(n / 8)
+          const show = (i % step === 0 && i <= n - 1 - Math.floor(step / 2)) || i === n - 1
+          return show ? (
+            <text key={d} x={x(i)} y={H - 8} textAnchor="middle" fontSize="11" fill="#7E96B5">{d.slice(5)}</text>
+          ) : null
+        })}
         {series.map(s => {
           const y = s.axis === 'left' ? yL : yR
           const path = s.data.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(Number.isFinite(v) ? v : s.axis === 'left' ? ls.min : rs.min).toFixed(1)}`).join(' ')
