@@ -115,17 +115,36 @@ func main() {
 	// Background whole-market quote snapshot for ranking columns.
 	quoteCache := quotes.New(3)
 	defer quoteCache.Close()
-	go quoteCache.Run(context.Background(), func() []string {
-		all := s.AllProfiles()
-		syms := make([]string, 0, len(all))
-		for _, p := range all {
-			syms = append(syms, p.Symbol)
+
+	// 今日实时bar叠加层：快照每刷一轮就重建（合成今日K线 + 锚定校验），
+	// 收盘后由 archiveToday 落库。回测不经过叠加层。
+	ov := newOverlay()
+	go func() {
+		quoteCache.Run(context.Background(), func() []string {
+			all := s.AllProfiles()
+			syms := make([]string, 0, len(all))
+			for _, p := range all {
+				syms = append(syms, p.Symbol)
+			}
+			return syms
+		}, time.Minute)
+	}()
+	go func() {
+		// 等首轮快照就绪后随每轮刷新重建叠加层。
+		for range time.Tick(15 * time.Second) {
+			if quoteCache.Ready() {
+				ov.refresh(s, quoteCache)
+			}
 		}
-		return syms
-	}, time.Minute)
+	}()
 
 	// 全市场情绪 + 板块统计（全量日线扫描，按 asOf 缓存）。
 	mv := newMarketView(s)
+
+	// 收盘落库（替代 dailyupdate 的核心职能）：15:05 批量写今日bar、
+	// 除权票全量重拉、指数补齐，完成后 mv 缓存失效。
+	arch := newArchiver(s, ov, mv, source)
+	go arch.run(context.Background())
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]string{"status": "ok"}) })
@@ -627,7 +646,13 @@ func main() {
 	})
 	mux.HandleFunc("GET /api/stocks/{symbol}/bars", func(w http.ResponseWriter, r *http.Request) {
 		symbol := strings.ToUpper(r.PathValue("symbol"))
-		bars := s.Bars(symbol)
+		// 叠加今日实时bar（锚定校验通过的票）；?closed=1 只看收盘序列。
+		var bars []market.Candle
+		if r.URL.Query().Get("closed") == "1" {
+			bars = s.Bars(symbol)
+		} else {
+			bars = ov.Bars(s, symbol)
+		}
 		if bars == nil {
 			errorJSON(w, 404, "stock not found")
 			return
@@ -729,7 +754,7 @@ func main() {
 		asOf := ""
 		for _, info := range s.Symbols() {
 			sym := info.Symbol
-			bars := s.Bars(sym)
+			bars := ov.Bars(s, sym) // 筛查含今日实时bar（盘中也能看到今天形成的形态）
 			if len(bars) < 60 {
 				continue // 上市过新：MA20/量比前置不足
 			}
