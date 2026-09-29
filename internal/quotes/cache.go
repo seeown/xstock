@@ -48,8 +48,11 @@ func New(workers int) *Cache {
 }
 
 // Run refreshes the whole market immediately and then on every tick until
-// the context is cancelled. symbols is re-evaluated on each refresh so newly
-// synced stocks are picked up automatically.
+// the context is cancelled. Refreshes are gated to the quote window
+// (weekday 09:10–15:10, covering the auction and the closing tail): outside
+// it the last snapshot stays frozen — nights and weekends no longer hammer
+// the TDX servers with futile polls. symbols is re-evaluated on each refresh
+// so newly synced stocks are picked up automatically.
 func (c *Cache) Run(ctx context.Context, symbols func() []string, every time.Duration) {
 	c.refresh(symbols())
 	ticker := time.NewTicker(every)
@@ -59,9 +62,24 @@ func (c *Cache) Run(ctx context.Context, symbols func() []string, every time.Dur
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			if !InQuoteWindow(time.Now()) {
+				continue
+			}
 			c.refresh(symbols())
 		}
 	}
+}
+
+// InQuoteWindow 报告是否处于行情刷新窗口：工作日 09:10–15:10。节假日无法
+// 本地判定，窗口内照刷（返回上一交易日定格，成本可接受）——相比全天候
+// 轮询仍省下夜间与周末的全部请求。
+func InQuoteWindow(now time.Time) bool {
+	wd := now.Weekday()
+	if wd == time.Saturday || wd == time.Sunday {
+		return false
+	}
+	hm := now.Hour()*100 + now.Minute()
+	return hm >= 910 && hm <= 1510
 }
 
 func (c *Cache) Close() {
