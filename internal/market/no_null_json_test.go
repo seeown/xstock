@@ -93,3 +93,36 @@ func TestSealedBandGuard(t *testing.T) {
 		t.Error("20%限制下-7%不是跌停")
 	}
 }
+
+// 封单维度判定（同花顺/东财口径）：价格到位且对应档位仍有封单才算封死；
+// 盘口缺失（盘前重置）退化为价格口径，保证收盘定格不被清零。
+func TestSealedWithOrders(t *testing.T) {
+	dn := func(price, ask1 float64, askVol int) bool {
+		return sealedDownWithOrders(RTQuote{PreClose: 5.00, Price: price, Ask1: ask1, AskVol1: askVol}, 10)
+	}
+	if !dn(4.50, 4.50, 1200) {
+		t.Error("价格到位+卖一封单在跌停价 → 封死")
+	}
+	if dn(4.50, 4.50, 0) {
+		t.Error("卖一量归零（封单被吃光）→ 不算封死")
+	}
+	if dn(4.50, 4.51, 800) {
+		t.Error("卖一价已抬离跌停价 → 不算封死")
+	}
+	if !dn(4.50, 0, 0) {
+		t.Error("盘口整体缺失 → 退化价格口径，保持计数")
+	}
+
+	up := func(price, bid1 float64, bidVol int) bool {
+		return sealedUpWithOrders(RTQuote{PreClose: 5.00, Price: price, Bid1: bid1, BidVol1: bidVol}, 10)
+	}
+	if !up(5.50, 5.50, 900) {
+		t.Error("涨停价到位+买一封单 → 封死")
+	}
+	if up(5.50, 5.50, 0) {
+		t.Error("买一封单归零 → 不算封死")
+	}
+	if up(5.50, 5.49, 900) {
+		t.Error("买一价脱离涨停价 → 不算封死")
+	}
+}

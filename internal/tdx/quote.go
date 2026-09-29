@@ -19,6 +19,11 @@ type Quote struct {
 	Open      float64 `json:"open"`   // 今开价（今日实时bar原料）
 	Low       float64 `json:"low"`    // 当日最低价
 	Vol       float64 `json:"vol"`    // 当日累计成交量（与日线同口径，实测为准）
+	// 五档盘口一档：封板判定（封单维度）。涨停封单挂在买一，跌停封单挂在卖一。
+	Bid1    float64 `json:"bid1"`
+	BidVol1 int     `json:"bidVol1"`
+	Ask1    float64 `json:"ask1"`
+	AskVol1 int     `json:"askVol1"`
 }
 
 // quoteBatchCap stays below the TDX protocol limit (~80 codes per request).
@@ -70,7 +75,8 @@ func (c *Client) FetchQuotes(symbols []string) ([]Quote, error) {
 			continue
 		}
 		q := Quote{Symbol: sym, Price: item.Close, PreClose: item.PreClose, Amount: item.Amount, High: item.High,
-			Open: item.Open, Low: item.Low, Vol: float64(item.Vol)}
+			Open: item.Open, Low: item.Low, Vol: float64(item.Vol),
+			Bid1: item.Bid1, BidVol1: item.BidVol1, Ask1: item.Ask1, AskVol1: item.AskVol1}
 		// A zero close means no trade today (suspension); computing a change
 		// against the previous close would show a bogus -100%.
 		if q.Price > 0 && q.PreClose > 0 {

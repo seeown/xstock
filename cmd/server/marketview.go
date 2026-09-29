@@ -425,7 +425,8 @@ func (mv *marketView) sentimentRealtimeOf(res *mvResult, snap map[string]tdx.Quo
 	pf := pctFor(profiles)
 	quotes := make([]market.RTQuote, 0, len(snap))
 	for _, q := range snap {
-		quotes = append(quotes, market.RTQuote{Symbol: q.Symbol, Price: q.Price, PreClose: q.PreClose, High: q.High})
+		quotes = append(quotes, market.RTQuote{Symbol: q.Symbol, Price: q.Price, PreClose: q.PreClose, High: q.High,
+			Bid1: q.Bid1, BidVol1: q.BidVol1, Ask1: q.Ask1, AskVol1: q.AskVol1})
 	}
 	_, include := quoteDayOf(res.AsOf, time.Now())
 	yesterdayLimit := 0
@@ -509,7 +510,8 @@ func (mv *marketView) sentimentPayload(qc *quotes.Cache) map[string]any {
 	snap := qc.Snapshot()
 	quotes := make([]market.RTQuote, 0, len(snap))
 	for _, q := range snap {
-		quotes = append(quotes, market.RTQuote{Symbol: q.Symbol, Price: q.Price, PreClose: q.PreClose, High: q.High})
+		quotes = append(quotes, market.RTQuote{Symbol: q.Symbol, Price: q.Price, PreClose: q.PreClose, High: q.High,
+			Bid1: q.Bid1, BidVol1: q.BidVol1, Ask1: q.Ask1, AskVol1: q.AskVol1})
 	}
 	_, include := quoteDayOf(res.AsOf, time.Now())
 	yesterdayLimit := 0

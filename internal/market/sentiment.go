@@ -96,6 +96,30 @@ func sealedDownGuarded(prevClose, price, pct float64) bool {
 	return math.Abs(chg+pct) <= 0.006/prevClose*100+0.06
 }
 
+// sealedUpWithOrders/sealedDownWithOrders：与同花顺/东财同口径的「封死」
+// 判定——价格精确到位 + 带宽守卫 + 对应档位仍有封单（涨停封单挂买一、
+// 跌停封单挂卖一）。一档盘口整体缺失（如盘前重置）时退化为仅价格判定，
+// 保证收盘定格数字在盘前时段不被清零。
+func sealedUpWithOrders(q RTQuote, pct float64) bool {
+	if !sealedUpGuarded(q.PreClose, q.Price, pct) {
+		return false
+	}
+	if q.Bid1 <= 0 && q.BidVol1 == 0 {
+		return true
+	}
+	return q.BidVol1 > 0 && math.Abs(q.Bid1-sealedLimitPrice(q.PreClose, pct, true)) <= 0.001
+}
+
+func sealedDownWithOrders(q RTQuote, pct float64) bool {
+	if !sealedDownGuarded(q.PreClose, q.Price, pct) {
+		return false
+	}
+	if q.Ask1 <= 0 && q.AskVol1 == 0 {
+		return true
+	}
+	return q.AskVol1 > 0 && math.Abs(q.Ask1-sealedLimitPrice(q.PreClose, pct, false)) <= 0.001
+}
+
 // IsDailyLimitUp 判定一根日线是否收盘涨停（server 层的板块统计用，
 // 口径同 SentimentHistory）。
 func IsDailyLimitUp(prevClose, close, pct float64) bool {
@@ -204,6 +228,11 @@ type RTQuote struct {
 	Price    float64
 	PreClose float64
 	High     float64
+	// 一档盘口：封死判定用（同花顺/东财口径——价格到位且封单还在才算）。
+	Bid1    float64
+	BidVol1 int
+	Ask1    float64
+	AskVol1 int
 }
 
 // SentimentRealtime 盘中口径：用最新快照的现价/日内高点判定封板与触板，
@@ -243,7 +272,7 @@ func ComputeSentimentRealtime(asOf, updatedAt string, quotes []RTQuote, streakAt
 			touchedTotal++
 		}
 		switch {
-		case sealedUpGuarded(q.PreClose, q.Price, pct):
+		case sealedUpWithOrders(q, pct):
 			rt.LimitUp++
 			streak := streakAtEnd[q.Symbol]
 			height, promoted := streak+1, streak >= 1
@@ -259,7 +288,7 @@ func ComputeSentimentRealtime(asOf, updatedAt string, quotes []RTQuote, streakAt
 			if promoted {
 				rt.Promoted++
 			}
-		case sealedDownGuarded(q.PreClose, q.Price, pct):
+		case sealedDownWithOrders(q, pct):
 			rt.LimitDown++
 		case touched:
 			rt.Broke++
