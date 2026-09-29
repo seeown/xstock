@@ -326,6 +326,10 @@ func main() {
 	})
 	mux.HandleFunc("GET /api/concepts", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, s.ConceptCounts()) })
 
+	// 盘前资讯（一期）：双源快讯 + 隔夜行情带，增量轮询。
+	ns := newNewsService()
+	newsRoutes(mux, s, ns)
+
 	// GET /api/auction — 竞价异动分层读数（自选/梯队/点火/异动榜 + 晨报三问）。
 	// 交易日 9:30 后的首次请求顺手归档（定格 bars + 晨报 JSONB，幂等）。
 	mux.HandleFunc("GET /api/auction", func(w http.ResponseWriter, r *http.Request) {

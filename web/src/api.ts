@@ -403,6 +403,35 @@ export interface SyncState {
   newListings: number
 }
 
+// 盘前资讯（一期）：双源快讯 + 隔夜行情带。
+export interface NewsStock {
+  symbol: string
+  name: string
+  watch: boolean
+}
+
+export interface NewsItem {
+  id: string
+  time: string
+  source: string
+  title: string
+  summary?: string
+  url?: string
+  hot: boolean
+  categories?: string[]
+  score: number
+  symbols?: NewsStock[]
+}
+
+export interface OvernightCell {
+  key: string
+  name: string
+  flag: string
+  price: number
+  chgPct: number
+  time: string
+}
+
 // 形态归档：每日筛查定格快照 + 买点后续走势（T+N 从买点日收盘动态计算）。
 export interface ArchivedSetup extends NPSetup {
   name?: string
@@ -529,6 +558,8 @@ export const api = {
   industries: () => request<string[]>('/api/industries'),
   syncState: () => request<SyncState>('/api/sync-state'),
   screen: (days: number) => request<ScreenResult>(`/api/screen?days=${days}`),
+  news: (since?: string) => request<{ items: NewsItem[]; serverTime: string }>(`/api/news${since ? `?since=${since.replace(/^&/, '')}` : ''}`),
+  overnight: () => request<OvernightCell[]>('/api/news/overnight'),
   screenArchive: () =>
     request<{ date: string; counts: Record<string, number>; total: number }>('/api/screen/archive', { method: 'POST' }),
   screenArchiveDates: () => request<string[]>('/api/screen/archives'),

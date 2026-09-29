@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard'
 import DataManager from './pages/DataManager'
 import Guide from './pages/Guide'
 import Market from './pages/Market'
+import News from './pages/News'
 import Screen from './pages/Screen'
 import Stocks from './pages/Stocks'
 import Strategy from './pages/Strategy'
@@ -20,6 +21,7 @@ export interface ViewDef {
 }
 
 export const VIEWS: ViewDef[] = [
+  { key: 'news', path: '/news', label: '盘前资讯', no: '00', Component: News },
   { key: 'guide', path: '/guide', label: '情绪指南', no: '01', Component: Guide },
   { key: 'auction', path: '/auction', label: '竞价异动', no: '02', Component: Auction },
   { key: 'screen', path: '/screen', label: '股票筛查', no: '03', Component: Screen },
