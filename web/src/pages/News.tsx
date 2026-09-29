@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, type NewsItem, type OvernightCell } from '../api'
+import { api, type Announcement, type CalEvent, type NewsItem, type OvernightCell } from '../api'
 import { KlineDetailModal, KlinePopover, useKlinePreview } from '../components/klinePreview'
 import { Button, Card, Skeleton, ToastStack, useToasts } from '../components/ui'
 import { useIsActive } from '../shell'
@@ -22,6 +22,12 @@ const filterTabs: Array<{ key: Filter; label: string }> = [
 ]
 
 const srcName: Record<string, string> = { em: '东财快讯', sina: '新浪 7×24' }
+
+// 公告分类 → 徽章文案（与后端 annCategories 对应）。
+const annCatName: Record<string, string> = {
+  forecast: '业绩', restructure: '重组', inquiry: '问询', incentive: '激励',
+  buyback: '回购', holding: '增减持', dividend: '分红', contract: '合同', other: '公告',
+}
 
 // 时段分组：今日 / 昨夜（15:00 之后到今日开盘前为"隔夜"语境）。
 function groupOf(t: string, now: Date): string {
@@ -80,6 +86,9 @@ export default function News() {
   const [items, setItems] = useState<NewsItem[] | null>(null)
   const [err, setErr] = useState('')
   const [overnight, setOvernight] = useState<OvernightCell[] | null>(null)
+  const [anns, setAnns] = useState<Announcement[] | null>(null)
+  const [annFilter, setAnnFilter] = useState<'top' | 'watch' | 'forecast' | 'restructure'>('top')
+  const [cal, setCal] = useState<CalEvent[]>([])
   const [filter, setFilter] = useState<Filter>('all')
   const [freshIDs, setFreshIDs] = useState<Set<string>>(new Set())
   const lastTimeRef = useRef<string>('')
@@ -115,12 +124,16 @@ export default function News() {
   }, [mergeItems])
 
   // 激活时首次全量 + 30 秒增量轮询（保活壳门控：切走即停）。
+  // 公告 5 分钟一拉（后端 10 分钟缓存），日历一次即够（纯本地推算）。
   useEffect(() => {
     if (!isActiveView) return
     load(true)
     api.overnight().then(setOvernight).catch(() => setOvernight([]))
+    api.announcements().then(setAnns).catch(() => setAnns([]))
+    api.calendar().then(setCal).catch(() => setCal([]))
     const t = window.setInterval(() => load(false), 30_000)
-    return () => window.clearInterval(t)
+    const ta = window.setInterval(() => api.announcements().then(setAnns).catch(() => {}), 5 * 60_000)
+    return () => { window.clearInterval(t); window.clearInterval(ta) }
   }, [isActiveView, load])
 
   // fresh 光效 8 秒后褪去
@@ -156,6 +169,21 @@ export default function News() {
     return c
   }, [items])
 
+  // 公告筛选：重点=评分前 20，其余按自选/分类。
+  const annShown = useMemo(() => {
+    if (!anns) return []
+    if (annFilter === 'top') return anns.slice(0, 20)
+    if (annFilter === 'watch') return anns.filter(a => a.watch)
+    return anns.filter(a => a.category === annFilter)
+  }, [anns, annFilter])
+
+  const annCounts = useMemo(() => ({
+    top: Math.min(anns?.length ?? 0, 20),
+    watch: anns?.filter(a => a.watch).length ?? 0,
+    forecast: anns?.filter(a => a.category === 'forecast').length ?? 0,
+    restructure: anns?.filter(a => a.category === 'restructure').length ?? 0,
+  }) as Record<string, number>, [anns])
+
   const { hh, mm, ss, target, now } = useCountdown()
   const phase = sessionPhase(now)
 
@@ -188,10 +216,10 @@ export default function News() {
       <header className="page-head">
         <div>
           <h1>盘前资讯</h1>
-          <p>公告 · 国内快讯 · 隔夜海外 —— 评分排序的双源合流（巨潮公告二期接入）</p>
+          <p>公告 · 国内快讯 · 隔夜海外 —— 评分排序的三源合流（东财 / 新浪 / 巨潮）</p>
         </div>
         <span className="pre-conn">
-          <span className="dot" /> 双源在线 · 东财 / 新浪 · 30 秒自动滚动
+          <span className="dot" /> 三源在线 · 快讯 30 秒 · 公告 10 分钟自动滚动
         </span>
       </header>
 
@@ -346,22 +374,54 @@ export default function News() {
           )}
         </section>
 
-        {/* 右栏：公告（二期）+ 日历 */}
+        {/* 右栏：巨潮公告 + 财经日历 */}
         <div>
           <section className="side-card" aria-label="重要公告">
             <div className="block-head">
               <h2><span className="k">ANN</span>重要公告</h2>
+              <span className="src-from">巨潮全量 · 近 2 日</span>
             </div>
-            <div className="chart-empty" style={{ padding: '14px 6px' }}>
-              二期接入巨潮全量公告（晚间 30 分钟一扫 · 评分排序）<br />
-              <span className="src-from">当前快讯流已含东财/新浪转发的重点公告</span>
+            <div className="fbar" style={{ marginBottom: 8 }}>
+              {([['top', '重点'], ['watch', '自选'], ['forecast', '业绩'], ['restructure', '重组']] as const).map(([k, label]) => (
+                <button key={k} className={`chip${annFilter === k ? ' on' : ''}`} onClick={() => setAnnFilter(k)}>{label}<span className="cnt">{annCounts[k]}</span></button>
+              ))}
             </div>
+            {anns === null ? (
+              <div style={{ display: 'grid', gap: 10, padding: '6px 2px' }}><Skeleton h={38} count={5} /></div>
+            ) : annShown.length === 0 ? (
+              <div className="chart-empty" style={{ padding: '14px 6px' }}>
+                {annFilter === 'watch' ? '自选池近 2 日无公告' : '暂无公告（巨潮可能在限流，稍候自动重试）'}
+              </div>
+            ) : (
+              <div>
+                {annShown.map(a => (
+                  <div key={a.url} className={`ann-item${a.watch ? ' watch-hit' : ''}`}>
+                    <div className="ann-meta">
+                      <span className={`ann-cat${a.category === 'other' ? ' grey' : ''}`}>{annCatName[a.category] ?? '公告'}</span>
+                      <button className="ann-stock" onClick={() => openStock(a.symbol, a.name)}>{a.name}</button>
+                      {a.board && <span className="ann-board">{a.board}</span>}
+                      {a.watch && <span className="ann-board" style={{ color: 'var(--accent-soft)' }}>自选</span>}
+                      <span className="ann-time">{a.time.slice(5, 16)}</span>
+                    </div>
+                    <div className="ann-title" onClick={() => window.open(a.url, '_blank', 'noopener')} title="查看公告 PDF">{a.title}</div>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
-          <section className="side-card" aria-label="盘前节奏">
+          <section className="side-card" aria-label="盘前节奏与财经日历">
             <div className="block-head">
-              <h2><span className="k">CAL</span>盘前节奏</h2>
+              <h2><span className="k">CAL</span>盘前节奏 · 财经日历</h2>
             </div>
-            <div className="cal-item"><span className="cal-time">09:15</span><div><div className="cal-title">集合竞价开始</div><div className="cal-sub">竞价异动页同步监测梯队承接</div></div></div>
+            {cal.map((e, i) => (
+              <div key={`${e.name}-${i}`} className={`cal-item${e.hot ? ' hot' : ''}`}>
+                <span className="cal-time">{e.time}</span>
+                <div>
+                  <div className="cal-title">{e.name}{e.hot ? ' ★' : ''}</div>
+                  {e.note && <div className="cal-sub">{e.note}</div>}
+                </div>
+              </div>
+            ))}
             <div className="cal-item"><span className="cal-time">09:30</span><div><div className="cal-title">连续竞价开盘</div><div className="cal-sub">分时图分钟级滚动</div></div></div>
             <div className="cal-item night"><span className="cal-time">15:05</span><div><div className="cal-title">日线落库 + 情绪统计重算</div><div className="cal-sub">收盘定格 · 形态可归档</div></div></div>
             <div className="cal-item night"><span className="cal-time">21:30</span><div><div className="cal-title">美股开盘（冬令时 22:30）</div><div className="cal-sub">隔夜行情带次日更新</div></div></div>

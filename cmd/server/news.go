@@ -497,6 +497,21 @@ func newsRoutes(mux *http.ServeMux, s *store.Store, ns *newsService) {
 		}
 		writeJSON(w, 200, v)
 	})
+	// 二期：巨潮公告（10 分钟缓存，watchSet 每次现取以跟踪星标变化）与财经日历（纯本地推算）。
+	mux.HandleFunc("GET /api/news/announcements", func(w http.ResponseWriter, r *http.Request) {
+		v, err := liveFetch("news:anns", 10*time.Minute, func() (any, error) {
+			watchSet, _ := s.WatchSet(r.Context())
+			return fetchAnnouncements(r.Context(), watchSet)
+		})
+		if err != nil {
+			errorJSON(w, 502, err.Error())
+			return
+		}
+		writeJSON(w, 200, v)
+	})
+	mux.HandleFunc("GET /api/news/calendar", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, fetchCalendar(time.Now()))
+	})
 }
 
 var _ = url.QueryEscape // 保留 import 提示（如后续需要转义）

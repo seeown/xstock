@@ -432,6 +432,27 @@ export interface OvernightCell {
   time: string
 }
 
+// 盘前资讯二期：巨潮公告 + 财经日历。
+export interface Announcement {
+  symbol: string
+  name: string
+  title: string
+  time: string
+  category: string
+  score: number
+  watch: boolean
+  url: string
+  board?: string
+}
+
+export interface CalEvent {
+  date: string
+  time: string
+  name: string
+  note?: string
+  hot?: boolean
+}
+
 // 形态归档：每日筛查定格快照 + 买点后续走势（T+N 从买点日收盘动态计算）。
 export interface ArchivedSetup extends NPSetup {
   name?: string
@@ -560,6 +581,8 @@ export const api = {
   screen: (days: number) => request<ScreenResult>(`/api/screen?days=${days}`),
   news: (since?: string) => request<{ items: NewsItem[]; serverTime: string }>(`/api/news${since ? `?since=${since.replace(/^&/, '')}` : ''}`),
   overnight: () => request<OvernightCell[]>('/api/news/overnight'),
+  announcements: () => request<Announcement[]>('/api/news/announcements'),
+  calendar: () => request<CalEvent[]>('/api/news/calendar'),
   screenArchive: () =>
     request<{ date: string; counts: Record<string, number>; total: number }>('/api/screen/archive', { method: 'POST' }),
   screenArchiveDates: () => request<string[]>('/api/screen/archives'),
