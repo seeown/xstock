@@ -18,7 +18,7 @@ type Quote struct {
 	High      float64 `json:"high"`   // 当日最高价（含0=无数据）；炸板率等盘中判定用
 	Open      float64 `json:"open"`   // 今开价（今日实时bar原料）
 	Low       float64 `json:"low"`    // 当日最低价
-	Vol       float64 `json:"vol"`    // 当日累计成交量（与日线同口径，实测为准）
+	Vol       float64 `json:"vol"`    // 当日累计成交量（股）——协议给的是手，×100 对齐日线口径
 	// 五档盘口一档：封板判定（封单维度）。涨停封单挂在买一，跌停封单挂在卖一。
 	Bid1    float64 `json:"bid1"`
 	BidVol1 int     `json:"bidVol1"`
@@ -75,7 +75,7 @@ func (c *Client) FetchQuotes(symbols []string) ([]Quote, error) {
 			continue
 		}
 		q := Quote{Symbol: sym, Price: item.Close, PreClose: item.PreClose, Amount: item.Amount, High: item.High,
-			Open: item.Open, Low: item.Low, Vol: float64(item.Vol),
+			Open: item.Open, Low: item.Low, Vol: float64(item.Vol) * 100, // 手→股（2026-09-29 实测：茅台 26366 vs 日线 2.82M，恰差 100 倍）
 			Bid1: item.Bid1, BidVol1: item.BidVol1, Ask1: item.Ask1, AskVol1: item.AskVol1}
 		// A zero close means no trade today (suspension); computing a change
 		// against the previous close would show a bogus -100%.
