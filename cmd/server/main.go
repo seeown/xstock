@@ -171,6 +171,12 @@ func main() {
 			writeJSON(w, 200, zt)
 			return
 		}
+		// 雷达默认：N 字三段参数（与回测的 NParams 是两套结构），股票雷达
+		// 与「立即归档」共用这一槽位。
+		if strategy == "radar" {
+			writeJSON(w, 200, radarParams(r.Context(), s))
+			return
+		}
 		n := market.DefaultParams()
 		if ps, err := s.DefaultParamSet(r.Context(), strategy); err != nil {
 			log.Printf("读取默认参数组失败，使用内置值: %v", err)
@@ -204,8 +210,8 @@ func main() {
 			errorJSON(w, 400, "invalid json: "+err.Error())
 			return
 		}
-		if body.Name == "" || (body.Strategy != "n" && body.Strategy != "zt") || len(body.Params) == 0 {
-			errorJSON(w, 400, "name, strategy (n|zt) and params are required")
+		if body.Name == "" || (body.Strategy != "n" && body.Strategy != "zt" && body.Strategy != "radar") || len(body.Params) == 0 {
+			errorJSON(w, 400, "name, strategy (n|zt|radar) and params are required")
 			return
 		}
 		ps, err := s.CreateParamSet(r.Context(), body.Name, body.Strategy, body.Params)
@@ -264,11 +270,11 @@ func main() {
 		writeJSON(w, 200, map[string]bool{"ok": true})
 	})
 
-	// strategy=n|zt；清除后回退内置默认值。
+	// strategy=n|zt|radar；清除后回退内置默认值。
 	mux.HandleFunc("POST /api/params/default/clear", func(w http.ResponseWriter, r *http.Request) {
 		strategy := r.URL.Query().Get("strategy")
-		if strategy != "n" && strategy != "zt" {
-			errorJSON(w, 400, "strategy must be n or zt")
+		if strategy != "n" && strategy != "zt" && strategy != "radar" {
+			errorJSON(w, 400, "strategy must be n, zt or radar")
 			return
 		}
 		if err := s.ClearDefaultParamSet(r.Context(), strategy); err != nil {
@@ -741,7 +747,7 @@ func main() {
 
 	mux.HandleFunc("GET /api/screen", func(w http.ResponseWriter, r *http.Request) {
 		days := queryInt(r, "days", 10)
-		asOf, counts, items, _ := scanScreen(s, ov, days)
+		asOf, counts, items := scanScreen(s, ov, days, radarParams(r.Context(), s))
 		writeJSON(w, 200, map[string]any{
 			"asOf": asOf, "windowDays": days, "counts": counts, "items": items,
 		})

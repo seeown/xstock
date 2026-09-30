@@ -41,8 +41,33 @@ export interface FirstBoardParams {
   aboveMA?: number
 }
 
-export type StrategyKind = 'n' | 'zt'
-export type StrategyParams = NParams | FirstBoardParams
+export type StrategyKind = 'n' | 'zt' | 'radar'
+export type StrategyParams = NParams | FirstBoardParams | RadarParams
+
+// 雷达（N 字三段）参数：与回测的 NParams 是两套结构，存 param_sets 的
+// strategy=radar 槽位，股票雷达与「立即归档」共用。
+export interface RadarParams {
+  aRiseMinPct: number
+  aRiseMaxPct: number
+  aMaxBars: number
+  aVolRatio: number
+  calmLookback: number
+  calmMaxPct: number
+  requireLimitUpA: boolean
+  bMinDays: number
+  bMaxDays: number
+  retrMin: number
+  goldenMax: number
+  retrMax: number
+  bVolRatio: number
+  breakBufPct: number
+  cVolRatio: number
+  retestDays: number
+  retestBandPct: number
+  retestVolRatio: number
+  chaseCRatio: number
+  chaseMa5Pct: number
+}
 
 // 服务端 param_sets 表的一行：用户保存的参数组，可标记为某策略的回测默认。
 export interface ParamSet {

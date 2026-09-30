@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { api, type ParamSet, type StrategyKind, type StrategyParams } from '../api'
+import { api, type ParamSet, type RadarParams, type StrategyKind, type StrategyParams } from '../api'
 import { Button, Card, CardHead, TextField } from '../components/ui'
 
 const rules = [
@@ -70,6 +70,20 @@ const FIELD_LABELS: Record<string, string> = {
   stopLossPct: '止损线（%）', takeProfitPct: '止盈线（%）', maxHoldDays: '最长持仓（天）',
 }
 
+// 雷达参数字段的中文标签（顺序即展示顺序：A段 → B段 → 突破 → 回踩 → 追高）。
+const RADAR_FIELDS: Array<[keyof RadarParams, string]> = [
+  ['aRiseMinPct', 'A段最小涨幅 %'], ['aRiseMaxPct', 'A段最大涨幅 %'],
+  ['aMaxBars', 'A段K线数上限'], ['aVolRatio', 'A段量比 ×'],
+  ['calmLookback', '平静回看（天）'], ['calmMaxPct', '平静涨幅上限 %'],
+  ['bMinDays', '最短回调（天）'], ['bMaxDays', '最长回调（天）'],
+  ['retrMin', '最小回撤'], ['goldenMax', '黄金区上界'],
+  ['retrMax', '最大回撤（超过作废）'], ['bVolRatio', '回调量比 ×'],
+  ['breakBufPct', '突破缓冲 %'], ['cVolRatio', '突破量比 ×'],
+  ['retestDays', '回踩窗口（天）'], ['retestBandPct', '回踩带宽 %'],
+  ['retestVolRatio', '回踩量比 ×'], ['chaseCRatio', '追高C段比'],
+  ['chaseMa5Pct', '追高·高出5日线 %'],
+]
+
 // 旧版把自定义组存在浏览器 localStorage；检测到就提供一次性迁移。
 const LS_KEY = 'xstock.param-groups'
 
@@ -112,7 +126,8 @@ export default function Strategy() {
     const defOf = (st: StrategyKind) => sets?.some(g => g.strategy === st && g.isDefault) ?? false
     return [
       ...builtins.map(b => ({ id: `builtin-${b.strategy}`, name: `内置 · ${b.strategy === 'n' ? '通用 N 字' : '首板回调'}`, strategy: b.strategy, params: b.params, builtin: true, isDefault: !defOf(b.strategy) })),
-      ...(sets ?? []).map(g => ({ id: String(g.id), name: g.name, strategy: g.strategy, params: g.params, builtin: false, isDefault: g.isDefault })),
+      // radar 槽位由下方「雷达默认」板块单独管理，不混进回测参数组列表
+      ...(sets ?? []).filter(g => g.strategy !== 'radar').map(g => ({ id: String(g.id), name: g.name, strategy: g.strategy, params: g.params, builtin: false, isDefault: g.isDefault })),
     ]
   }, [builtins, sets])
 
@@ -209,6 +224,64 @@ export default function Strategy() {
       if (Array.isArray(raw) && raw.length) setLegacy(raw)
     } catch { /* ignore */ }
   }, [])
+
+  // ── 雷达默认：股票雷达与「立即归档」共用的独立参数槽位 ──
+  const [radar, setRadar] = useState<RadarParams | null>(null)
+  const [radarDraft, setRadarDraft] = useState<Record<string, number | boolean> | null>(null)
+  const [radarNote, setRadarNote] = useState('')
+
+  const radarGroup = useMemo(() => (sets ?? []).find(g => g.strategy === 'radar' && g.isDefault) ?? null, [sets])
+
+  const reloadRadar = async () => {
+    try {
+      const p = await api.defaultParams('radar')
+      setRadar(p as RadarParams)
+      setRadarDraft(null)
+    } catch {
+      setRadarNote('雷达参数加载失败')
+    }
+  }
+  useEffect(() => { reloadRadar() }, [])
+
+  const radarDirty = radarDraft != null
+  const radarVal = (k: keyof RadarParams, fallback: number | boolean): number | boolean =>
+    radarDraft && radarDraft[k] != null ? radarDraft[k] : fallback
+
+  const saveRadar = async () => {
+    if (!radar) return
+    setBusy(true)
+    try {
+      const merged = { ...radar, ...(radarDraft ?? {}) } as unknown as StrategyParams
+      if (radarGroup) {
+        await api.updateParamSet(radarGroup.id, { name: radarGroup.name, params: merged })
+      } else {
+        const created = await api.saveParamSet({ name: '雷达默认', strategy: 'radar', params: merged })
+        await api.setDefaultParamSet(created.id)
+      }
+      setRadarDraft(null)
+      await reload()
+      await reloadRadar()
+      setRadarNote(radarGroup ? '修改已保存，雷达下轮扫描生效' : '已建「雷达默认」组并设为生效，雷达下轮扫描生效')
+    } catch (e) {
+      setRadarNote(e instanceof Error ? e.message : '保存失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const resetRadar = async () => {
+    setBusy(true)
+    try {
+      await api.clearDefaultParamSet('radar')
+      await reload()
+      await reloadRadar()
+      setRadarNote('已恢复内置默认（雷达下轮扫描生效）')
+    } catch (e) {
+      setRadarNote(e instanceof Error ? e.message : '操作失败')
+    } finally {
+      setBusy(false)
+    }
+  }
   const importLegacy = async () => {
     setBusy(true)
     try {
@@ -353,6 +426,56 @@ export default function Strategy() {
                 <div className="kv"><span className="k">量比</span><span>2~3 温和放量较稳</span></div>
                 <div className="kv"><span className="k">止损</span><span>3%~5% 常用区间</span></div>
                 <div className="kv"><span className="k">止盈</span><span>10%~20% 配合持仓期</span></div>
+              </Card>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* ── 雷达默认：独立参数槽位，股票雷达 + 立即归档共用 ── */}
+      <Card>
+        <CardHead
+          title="雷达默认 · 股票雷达参数"
+          sub={`独立于回测参数组。「股票雷达」与「立即归档」按此组扫描${radarGroup ? '' : '（当前未配置，用内置默认）'}；归档只定格当时参数，改参不动历史归档。`}
+          right={radarNote ? <span className="muted-c" style={{ fontSize: 11.5, whiteSpace: 'nowrap' }}>{radarNote}</span> : undefined}
+        />
+        {radar && (
+          <div className="split section-gap">
+            <div className="grow">
+              <div className="fbar" style={{ marginBottom: 12 }}>
+                <Button onClick={saveRadar} loading={busy && !radarDirty} disabled={!radarDirty}>保存修改</Button>
+                {radarDirty && <Button variant="mini" onClick={() => setRadarDraft(null)}>放弃</Button>}
+                <Button variant="ghost" disabled={busy || !radarGroup} onClick={resetRadar}>恢复内置默认</Button>
+              </div>
+              <div className="radar-grid">
+                {RADAR_FIELDS.map(([key, label]) => (
+                  <label key={key} className="radar-field">
+                    <span className="fl">{label}</span>
+                    <input
+                      className="input"
+                      type="number" step="any"
+                      value={String(radarVal(key, Number(radar[key])))}
+                      onChange={e => setRadarDraft(prev => ({ ...(prev ?? {}), [key]: Number(e.target.value) }))}
+                    />
+                  </label>
+                ))}
+                <label className="radar-field radar-check">
+                  <input
+                    type="checkbox"
+                    checked={radarVal('requireLimitUpA', radar.requireLimitUpA) === true}
+                    onChange={e => setRadarDraft(prev => ({ ...(prev ?? {}), requireLimitUpA: e.target.checked }))}
+                  />
+                  <span className="fl">A 段须含涨停</span>
+                </label>
+              </div>
+            </div>
+            <div className="stack" style={{ flex: '0 0 300px' }}>
+              <Card hoverable>
+                <div className="h"><span className="dot" />生效范围</div>
+                <div className="kv"><span className="k">股票雷达</span><span className="ok">60 秒自动扫描即用</span></div>
+                <div className="kv"><span className="k">立即归档</span><span className="ok">同口径 · 快照含当时参数</span></div>
+                <div className="kv"><span className="k">回测参数组</span><span>互不影响（两套结构）</span></div>
+                <div className="kv"><span className="k">未配置时</span><span>内置默认（10%~25% 涨幅 · 黄金分割回撤）</span></div>
               </Card>
             </div>
           </div>

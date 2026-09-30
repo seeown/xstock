@@ -1767,3 +1767,33 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
   .pre-focus { grid-template-columns: 1fr; }
   .pre-countdown { font-size: 36px; }
 }
+
+/* ── 雷达默认参数（策略说明页）：紧凑网格 ── */
+.radar-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 10px 14px; max-width: 760px;
+}
+.radar-field { display: flex; flex-direction: column; gap: 4px; }
+.radar-field .fl { font-size: 11px; color: var(--muted); }
+.radar-field .input { padding: 5px 8px; font-size: 12.5px; }
+.radar-check { flex-direction: row; align-items: center; gap: 8px; align-self: end; padding-bottom: 6px; }
+.radar-check .fl { font-size: 12px; color: var(--body-c); }
+
+/* ── 股票雷达：60 秒轮询新票闪光 ── */
+.screen-flash {
+  animation: screen-new-flash 2.6s ease-out 1;
+}
+@keyframes screen-new-flash {
+  0%   { background: rgba(56, 189, 248, .30); box-shadow: inset 3px 0 0 var(--accent); }
+  60%  { background: rgba(56, 189, 248, .12); }
+  100% { background: transparent; box-shadow: none; }
+}
+.screen-newbar {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 11.5px; color: var(--accent);
+  padding: 4px 12px; border-radius: 99px;
+  background: rgba(56, 189, 248, .10); border: 1px solid rgba(56, 189, 248, .3);
+  animation: screen-new-flash 2.6s ease-out 1;
+}
+.screen-newbar b { font-family: var(--mono); }
+.screen-newbar .dot { width: 6px; height: 6px; border-radius: 99px; background: var(--accent); box-shadow: 0 0 8px rgba(56, 189, 248, .8); }

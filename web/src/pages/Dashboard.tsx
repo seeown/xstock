@@ -49,7 +49,8 @@ const tradeFields: ParamField[] = [
   { key: 'maxHoldDays', label: '最长持仓', unit: '天', min: 1 },
 ]
 
-const strategyMeta: Record<StrategyKind, { label: string; signalLabel: string; fields: ParamField[] }> = {
+// 回测页只承载 n/zt 两种战法；radar 槽位是股票雷达专用参数（策略说明页管理）。
+const strategyMeta: Record<Exclude<StrategyKind, 'radar'>, { label: string; signalLabel: string; fields: ParamField[] }> = {
   n: { label: '通用 N 字', signalLabel: 'N 字', fields: nSignalFields },
   zt: { label: '首板回调', signalLabel: '首板回调', fields: ztSignalFields },
 }
@@ -71,7 +72,8 @@ export default function Dashboard() {
 
   const [symbolInput, setSymbolInput] = useState(initialSymbol)
   const [activeSymbol, setActiveSymbol] = useState(initialSymbol)
-  const [strategy, setStrategy] = useState<StrategyKind>('n')
+  // 回测页只承载 n/zt；radar 槽位是股票雷达专用（策略说明页管理）。
+  const [strategy, setStrategy] = useState<Exclude<StrategyKind, 'radar'>>('n')
   const [params, setParams] = useState<StrategyParams | null>(null)
   const [windowDays, setWindowDays] = useState(10)
   const [allHistory, setAllHistory] = useState(false)
@@ -103,7 +105,7 @@ export default function Dashboard() {
   const [running, setRunning] = useState(false)
   const [feedback, setFeedback] = useState<Feedback>({ text: '', kind: 'info' })
 
-  const run = useCallback(async (sym: string, p: StrategyParams, strat: StrategyKind) => {
+  const run = useCallback(async (sym: string, p: StrategyParams, strat: Exclude<StrategyKind, 'radar'>) => {
     const symbol = sym.trim().toUpperCase()
     if (!symbol) {
       setFeedback({ text: '请输入股票代码。', kind: 'error' })
@@ -136,7 +138,7 @@ export default function Dashboard() {
   }, [allHistory, windowDays])
 
   // 切换策略：拉取该策略默认参数并立即重跑当前标的。
-  const switchStrategy = useCallback(async (kind: StrategyKind) => {
+  const switchStrategy = useCallback(async (kind: Exclude<StrategyKind, 'radar'>) => {
     if (kind === strategy || running) return
     try {
       const p = await api.defaultParams(kind)
@@ -437,7 +439,7 @@ export default function Dashboard() {
           <Card className="sticky">
             <CardHead title="策略参数" sub="修改后点击「运行回测」生效" />
             <div className="strategy-switch">
-              {(Object.keys(strategyMeta) as StrategyKind[]).map(kind => (
+              {(Object.keys(strategyMeta) as Array<Exclude<StrategyKind, 'radar'>>).map(kind => (
                 <button
                   key={kind}
                   className={`btn small ${strategy === kind ? 'primary' : 'ghost'}`}

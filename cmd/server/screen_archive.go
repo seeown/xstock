@@ -7,8 +7,10 @@ package main
 // 确认日）的收盘价动态计算——日线库里都有，不落库。
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"sort"
 	"strings"
@@ -24,9 +26,28 @@ type screenItem struct {
 	sortKey  string
 }
 
+// radarParams 读取「雷达默认」参数组（strategy=radar 槽位）：从内置值起步
+// 做部分覆盖，JSON 里没出现的字段保留内置值；未配置时就是内置默认。
+func radarParams(ctx context.Context, s *store.Store) market.NPParams {
+	p := market.DefaultNPParams()
+	ps, err := s.DefaultParamSet(ctx, "radar")
+	if err != nil {
+		log.Printf("读取雷达默认参数组失败，使用内置值: %v", err)
+		return p
+	}
+	if ps == nil {
+		return p
+	}
+	if err := json.Unmarshal(ps.Params, &p); err != nil {
+		log.Printf("雷达默认参数组 %s 解析失败，使用内置值: %v", ps.Name, err)
+		return market.DefaultNPParams()
+	}
+	return p
+}
+
 // scanScreen 全市场 N 字筛查（GET /api/screen 的本体，归档复用同口径）。
-func scanScreen(s *store.Store, ov *overlay, days int) (asOf string, counts map[string]int, items []screenItem, params market.NPParams) {
-	params = market.DefaultNPParams()
+// 参数由调用方传入（「雷达默认」参数组），不再写死内置值。
+func scanScreen(s *store.Store, ov *overlay, days int, params market.NPParams) (asOf string, counts map[string]int, items []screenItem) {
 	// 恐慌日集合：从上证指数日线计算（单日跌幅 ≥1.5%）。
 	panicDays := map[string]bool{}
 	if idx := s.Bars("000001.SH"); len(idx) > 1 {
@@ -79,7 +100,7 @@ func scanScreen(s *store.Store, ov *overlay, days int) (asOf string, counts map[
 		}
 		return items[i].Symbol < items[j].Symbol
 	})
-	return asOf, counts, items, params
+	return asOf, counts, items
 }
 
 // buyPointOf 买点日：B1=企稳触发日，B2=突破日，B3=回踩确认日（后两者即 KeyDate）。
@@ -134,11 +155,12 @@ func perfFromBuy(bars []market.Candle, buyDate string) (buyPrice, t1, t5, t10, h
 
 // archiveScreenNow 立即归档：现扫 + 以 asOf 全量替换。
 func archiveScreenNow(r *http.Request, s *store.Store, ov *overlay) (map[string]any, error) {
-	asOf, _, items, params := scanScreen(s, ov, 10)
+	rp := radarParams(r.Context(), s)
+	asOf, _, items := scanScreen(s, ov, 10, rp)
 	if asOf == "" {
 		return nil, fmt.Errorf("扫描结果为空（本地日线为空？先同步日K数据）")
 	}
-	paramsJSON, err := json.Marshal(params)
+	paramsJSON, err := json.Marshal(rp)
 	if err != nil {
 		return nil, err
 	}
