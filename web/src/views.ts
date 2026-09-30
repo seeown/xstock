@@ -24,7 +24,7 @@ export const VIEWS: ViewDef[] = [
   { key: 'news', path: '/news', label: '盘前资讯', no: '00', Component: News },
   { key: 'guide', path: '/guide', label: '情绪指南', no: '01', Component: Guide },
   { key: 'auction', path: '/auction', label: '竞价异动', no: '02', Component: Auction },
-  { key: 'screen', path: '/screen', label: '股票筛查', no: '03', Component: Screen },
+  { key: 'screen', path: '/screen', label: '股票雷达', no: '03', Component: Screen },
   { key: 'watchlist', path: '/watchlist', label: '自选股', no: '04', Component: Watchlist },
   { key: 'market', path: '/market', label: '大盘行情', no: '05', Component: Market },
   { key: 'stocks', path: '/stocks', label: '个股行情', no: '06', Component: Stocks },

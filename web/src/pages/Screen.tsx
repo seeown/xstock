@@ -251,8 +251,8 @@ export default function Screen() {
     <div className="page">
       <header className="page-head">
         <div>
-          <h1>股票筛查</h1>
-          <p>全市场 N 字战法筛查：首板涨停 → 缩量回调 → 放量突破 → 回踩企稳 · <span className="mono">{result ? `截至 ${result.asOf}` : '扫描中'}</span></p>
+          <h1>股票雷达</h1>
+          <p>全市场 N 字战法雷达：首板涨停 → 缩量回调 → 放量突破 → 回踩企稳 · <span className="mono">{result ? `截至 ${result.asOf}` : '扫描中'}</span></p>
         </div>
         <div className="symbol-bar">
           <input
