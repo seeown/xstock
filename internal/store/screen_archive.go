@@ -66,6 +66,9 @@ func (s *Store) ReplaceScreenSnapshots(ctx context.Context, date string, params 
 		end := min(start+chunk, len(items))
 		part := items[start:end]
 		var sb strings.Builder
+		// ON CONFLICT DO NOTHING：形态扫描理论上可能对同一 (symbol, stage,
+		// key_date) 产出多条（不同 A 段入口的路径在突破日汇合），并发归档
+		// 也会撞键——全量替换语义下重复键留一条即可，不值得 500。
 		sb.WriteString("INSERT INTO screen_snapshots (date, stage, symbol, key_date, name, industry, setup) VALUES ")
 		args := make([]any, 0, len(part)*7)
 		for i, it := range part {
@@ -76,6 +79,7 @@ func (s *Store) ReplaceScreenSnapshots(ctx context.Context, date string, params 
 			fmt.Fprintf(&sb, "($%d,$%d,$%d,$%d,$%d,$%d,$%d)", base+1, base+2, base+3, base+4, base+5, base+6, base+7)
 			args = append(args, it.Date, it.Stage, it.Symbol, it.KeyDate, it.Name, it.Industry, it.Setup)
 		}
+		sb.WriteString(" ON CONFLICT (date, symbol, stage, key_date) DO NOTHING")
 		if _, err := tx.ExecContext(ctx, sb.String(), args...); err != nil {
 			return fmt.Errorf("insert screen snapshots %s: %w", date, err)
 		}

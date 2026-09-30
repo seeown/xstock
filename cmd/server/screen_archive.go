@@ -134,7 +134,7 @@ func perfFromBuy(bars []market.Candle, buyDate string) (buyPrice, t1, t5, t10, h
 
 // archiveScreenNow 立即归档：现扫 + 以 asOf 全量替换。
 func archiveScreenNow(r *http.Request, s *store.Store, ov *overlay) (map[string]any, error) {
-	asOf, counts, items, params := scanScreen(s, ov, 10)
+	asOf, _, items, params := scanScreen(s, ov, 10)
 	if asOf == "" {
 		return nil, fmt.Errorf("扫描结果为空（本地日线为空？先同步日K数据）")
 	}
@@ -142,21 +142,34 @@ func archiveScreenNow(r *http.Request, s *store.Store, ov *overlay) (map[string]
 	if err != nil {
 		return nil, err
 	}
-	rows := make([]store.ScreenSnapshot, len(items))
-	for i, it := range items {
+	rows := make([]store.ScreenSnapshot, 0, len(items))
+	seenKey := map[string]bool{}
+	for _, it := range items {
 		setupJSON, err := json.Marshal(it.NPSetup)
 		if err != nil {
 			return nil, err
 		}
-		rows[i] = store.ScreenSnapshot{
+		// 同一 (symbol, stage, key_date) 只归档一条：不同 A 段入口的路径
+		// 可能在同一突破日汇合，键重复在唯一约束下会炸整批写入。
+		k := it.Symbol + "|" + it.Stage + "|" + it.KeyDate
+		if seenKey[k] {
+			continue
+		}
+		seenKey[k] = true
+		rows = append(rows, store.ScreenSnapshot{
 			Date: asOf, Stage: it.Stage, Symbol: it.Symbol, KeyDate: it.KeyDate,
 			Name: it.Name, Industry: it.Industry, Setup: setupJSON,
-		}
+		})
 	}
 	if err := s.ReplaceScreenSnapshots(r.Context(), asOf, paramsJSON, rows); err != nil {
 		return nil, err
 	}
-	return map[string]any{"date": asOf, "counts": counts, "total": len(items)}, nil
+	// counts 从去重后的 rows 重算，与 total 一致（items 可能含重复键）。
+	archCounts := map[string]int{"b1": 0, "b2": 0, "b3": 0}
+	for _, r := range rows {
+		archCounts[r.Stage]++
+	}
+	return map[string]any{"date": asOf, "counts": archCounts, "total": len(rows)}, nil
 }
 
 // archivedScreenItem 归档视图的一行：形态全量 + 买点与后续走势。
