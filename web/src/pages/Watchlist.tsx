@@ -146,7 +146,7 @@ export default function Watchlist() {
                       <td className="num muted-c">{q ? fmtAmount(q.amount) : '—'}</td>
                       <td className="muted-c">{item.industry || '—'}</td>
                       <td>
-                        <button className="link-btn" onClick={e => { e.stopPropagation(); navigate(`/?symbol=${item.symbol}`) }}>回测</button>
+                        <button className="link-btn" onClick={e => { e.stopPropagation(); navigate(`/?view=backtest&symbol=${item.symbol}`) }}>回测</button>
                       </td>
                     </tr>
                   )
@@ -158,7 +158,7 @@ export default function Watchlist() {
       </Card>
 
       <KlinePopover state={kline.hover} />
-      <KlineDetailModal state={kline.detail} onClose={kline.closeDetail} onOpenBacktest={symbol => navigate(`/?symbol=${symbol}`)} />
+      <KlineDetailModal state={kline.detail} onClose={kline.closeDetail} onOpenBacktest={symbol => navigate(`/?view=backtest&symbol=${symbol}`)} />
     </div>
   )
 }

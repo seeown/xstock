@@ -431,7 +431,7 @@ export default function News() {
 
       <ToastStack toasts={toasts} onClose={dismiss} />
       <KlinePopover state={kline.hover} />
-      <KlineDetailModal state={kline.detail} onClose={kline.closeDetail} onOpenBacktest={symbol => navigate(`/?symbol=${symbol}`)} />
+      <KlineDetailModal state={kline.detail} onClose={kline.closeDetail} onOpenBacktest={symbol => navigate(`/?view=backtest&symbol=${symbol}`)} />
     </div>
   )
 }

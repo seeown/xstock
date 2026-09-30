@@ -137,7 +137,7 @@ export default function Screen() {
     return () => { cancelled = true }
   }, [quoteKey])
 
-  const openKline = (symbol: string) => navigate(`/?symbol=${encodeURIComponent(symbol)}`)
+  const openKline = (symbol: string) => navigate(`/?view=backtest&symbol=${encodeURIComponent(symbol)}`)
 
   // 行级 K 线预览与详情弹窗（悬浮预览 / 点击弹大图，逻辑在 klinePreview）
   const kline = useKlinePreview()

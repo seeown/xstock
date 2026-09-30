@@ -33,9 +33,9 @@ export const VIEWS: ViewDef[] = [
   { key: 'data', path: '/data', label: '数据管理', no: '09', Component: DataManager },
 ]
 
-// 裸 `/`(无 ?view=)默认落在回测分析——与改造前的首页一致，
-// 存量 `/?symbol=X` 深链接也因此无需任何重定向。
-export const DEFAULT_VIEW = 'backtest'
+// 裸 `/`(无 ?view=)默认落在盘前资讯——开盘前先看资讯再看行情。
+// 存量「跳回测」深链接已显式带 view=backtest，不依赖此默认值。
+export const DEFAULT_VIEW = 'news'
 
 export const viewByKey = (key: string | null): ViewDef | undefined =>
   VIEWS.find(v => v.key === key)

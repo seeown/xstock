@@ -435,7 +435,7 @@ export default function Market() {
 
       {/* 悬浮K线预览 + 选手详情弹窗（共享组件） */}
       <KlinePopover state={kline.hover} />
-      <KlineDetailModal state={kline.detail} onClose={kline.closeDetail} onOpenBacktest={symbol => navigate(`/?symbol=${symbol}`)} />
+      <KlineDetailModal state={kline.detail} onClose={kline.closeDetail} onOpenBacktest={symbol => navigate(`/?view=backtest&symbol=${symbol}`)} />
     </div>
   )
 }

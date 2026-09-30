@@ -323,7 +323,7 @@ export default function Stocks() {
                         )}
                       </td>
                       <td>
-                        <button className="link-btn" onClick={e => { e.stopPropagation(); navigate(`/?symbol=${item.symbol}`) }}>回测</button>
+                        <button className="link-btn" onClick={e => { e.stopPropagation(); navigate(`/?view=backtest&symbol=${item.symbol}`) }}>回测</button>
                       </td>
                     </tr>
                   )
@@ -428,7 +428,7 @@ export default function Stocks() {
               )}
 
               <div className="drawer-actions">
-                <Button onClick={() => navigate(`/?symbol=${drawerItem.symbol}`)}>看K线 · 回测</Button>
+                <Button onClick={() => navigate(`/?view=backtest&symbol=${drawerItem.symbol}`)}>看K线 · 回测</Button>
                 <Button variant="ghost" onClick={() => handleSync(drawerItem.symbol)} loading={!!syncing[drawerItem.symbol]}>
                   同步日K
                 </Button>
@@ -439,7 +439,7 @@ export default function Stocks() {
       )}
       {/* 悬浮K线预览 + 点击代码的K线详情弹窗（共享组件） */}
       <KlinePopover state={kline.hover} />
-      <KlineDetailModal state={kline.detail} onClose={kline.closeDetail} onOpenBacktest={symbol => navigate(`/?symbol=${symbol}`)} />
+      <KlineDetailModal state={kline.detail} onClose={kline.closeDetail} onOpenBacktest={symbol => navigate(`/?view=backtest&symbol=${symbol}`)} />
     </div>
   )
 }

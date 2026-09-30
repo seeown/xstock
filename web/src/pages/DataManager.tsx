@@ -156,7 +156,7 @@ export default function DataManager() {
                       </span>
                     </td>
                     <td className="num">
-                      <Link className="table-link" to={`/?symbol=${encodeURIComponent(s.symbol)}`}>查看回测 →</Link>
+                      <Link className="table-link" to={`/?view=backtest&symbol=${encodeURIComponent(s.symbol)}`}>查看回测 →</Link>
                     </td>
                   </tr>
                 ))}
