@@ -6,9 +6,12 @@ package main
 // 费率做成包级常量，口径调整改这里。
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"xstock/internal/quotes"
@@ -66,12 +69,14 @@ func paperPrice(s *store.Store, qc *quotes.Cache, ov *overlay, symbol string) fl
 }
 
 type paperOrderReq struct {
-	Symbol string          `json:"symbol"`
-	Name   string          `json:"name"`
-	Side   string          `json:"side"` // buy | sell
-	Qty    int             `json:"qty"`
-	Note   string          `json:"note"`
-	Signal json.RawMessage `json:"signal"` // 下单时的雷达信号上下文
+	Symbol     string          `json:"symbol"`
+	Name       string          `json:"name"`
+	Side       string          `json:"side"` // buy | sell
+	Qty        int             `json:"qty"`
+	Note       string          `json:"note"`
+	Signal     json.RawMessage `json:"signal"` // 下单时的雷达信号上下文
+	Limit      bool            `json:"limit"`      // 限价单
+	LimitPrice float64         `json:"limitPrice"` // 限价
 }
 
 // paperOverview 账户+持仓(实时估值)+净值曲线+流水。
@@ -197,6 +202,10 @@ func paperRoutes(mux *http.ServeMux, s *store.Store, qc *quotes.Cache, ov *overl
 			errorJSON(w, 500, err.Error())
 			return
 		}
+		// 挂单一并返回（含近期已了结的）。
+		acct := v["account"].(store.PaperAccount)
+		open, _ := s.PaperOpenOrders(r.Context(), acct.ID, "")
+		v["orders"] = open
 		writeJSON(w, 200, v)
 	})
 	mux.HandleFunc("POST /api/paper/orders", func(w http.ResponseWriter, r *http.Request) {
@@ -209,11 +218,89 @@ func paperRoutes(mux *http.ServeMux, s *store.Store, qc *quotes.Cache, ov *overl
 			errorJSON(w, 400, "symbol is required")
 			return
 		}
+		// 限价单：挂起等待撮合（买卖方向与现价交叉时也照挂——行为贴近
+		// 券商限价单，下一轮撮合循环触价即成）。
+		if req.Limit && req.LimitPrice > 0 {
+			acct, err := s.EnsurePaperAccount(r.Context(), paperAccountName, paperInitialCash)
+			if err != nil {
+				errorJSON(w, 500, err.Error())
+				return
+			}
+			o, err := s.CreatePaperOrder(r.Context(), acct.ID, store.PaperOpenOrder{
+				Symbol: req.Symbol, Name: req.Name, Side: req.Side,
+				Qty: req.Qty, LimitPrice: req.LimitPrice, Note: req.Note, Signal: req.Signal,
+			})
+			if err != nil {
+				errorJSON(w, 500, err.Error())
+				return
+			}
+			writeJSON(w, 200, map[string]any{"placed": o})
+			return
+		}
 		trade, err := paperExec(r, s, qc, ov, req)
 		if err != nil {
 			errorJSON(w, 400, err.Error())
 			return
 		}
-		writeJSON(w, 200, trade)
+		writeJSON(w, 200, map[string]any{"filled": trade})
 	})
+	mux.HandleFunc("DELETE /api/paper/orders/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil {
+			errorJSON(w, 400, "invalid id")
+			return
+		}
+		acct, err := s.EnsurePaperAccount(r.Context(), paperAccountName, paperInitialCash)
+		if err != nil {
+			errorJSON(w, 500, err.Error())
+			return
+		}
+		if err := s.CancelPaperOrder(r.Context(), acct.ID, id); err != nil {
+			errorJSON(w, 400, err.Error())
+			return
+		}
+		writeJSON(w, 200, map[string]bool{"ok": true})
+	})
+}
+
+// paperLimitMatch 限价撮合：快照价触到即成交（买入 ≤ 限价、卖出 ≥ 限价）。
+// 校验失败（现金/T+1）保持挂单下轮再试——挂单天然等现金到账或 T+1 解冻。
+// 由 main 的 goroutine 周期调用。
+func paperLimitMatch(s *store.Store, qc *quotes.Cache, ov *overlay) {
+	ctx := context.Background()
+	orders, err := s.OpenOrdersWithAccount(ctx)
+	if err != nil || len(orders) == 0 {
+		return
+	}
+	for _, o := range orders {
+		price := paperPrice(s, qc, ov, o.Symbol)
+		if price <= 0 {
+			continue
+		}
+		hit := (o.Side == "buy" && price <= o.LimitPrice) || (o.Side == "sell" && price >= o.LimitPrice)
+		if !hit {
+			continue
+		}
+		amount := round2f(price * float64(o.Qty))
+		fee, tax := paperFees(o.Side, amount)
+		trade, err := s.MatchPaperOrder(ctx, o.AccountID, o.ID, store.PaperTrade{
+			Symbol: o.Symbol, Name: o.Name, Side: o.Side,
+			Price: round2f(price), Qty: o.Qty, Amount: amount, Fee: fee, Tax: tax,
+			Note: mergeNote(o.Note, o.LimitPrice), Signal: o.Signal,
+		}, price)
+		if err != nil {
+			log.Printf("模拟仓限价单 %d 未成（%s %s %d股 限价%.2f 现价%.2f）: %v",
+				o.ID, o.Side, o.Symbol, o.Qty, o.LimitPrice, price, err)
+			continue
+		}
+		log.Printf("模拟仓限价单成交：%s %s %d 股 @%.2f（限价 %.2f）",
+			o.Side, o.Symbol, o.Qty, trade.Price, o.LimitPrice)
+	}
+}
+
+func mergeNote(note string, limit float64) string {
+	if note != "" {
+		note += " · "
+	}
+	return note + fmt.Sprintf("限价单 @%.2f", limit)
 }

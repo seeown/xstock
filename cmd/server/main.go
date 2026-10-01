@@ -338,6 +338,12 @@ func main() {
 
 	// 模拟仓：纸面交易账本 + 市价撮合。
 	paperRoutes(mux, s, quoteCache, ov)
+	// 限价单撮合：随快照节奏检查挂单触价（现金/T+1 不满足时留单重试）。
+	go func() {
+		for range time.Tick(30 * time.Second) {
+			paperLimitMatch(s, quoteCache, ov)
+		}
+	}()
 
 	// GET /api/auction — 竞价异动分层读数（自选/梯队/点火/异动榜 + 晨报三问）。
 	// 交易日 9:30 后的首次请求顺手归档（定格 bars + 晨报 JSONB，幂等）。

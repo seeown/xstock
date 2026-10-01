@@ -531,6 +531,7 @@ export interface PaperOverview {
   positions: PaperPosition[]
   trades: PaperTrade[]
   curve: PaperEquityPoint[]
+  orders?: PaperOpenOrder[]
 }
 
 export interface PaperOrderInput {
@@ -540,7 +541,30 @@ export interface PaperOrderInput {
   qty: number
   note?: string
   signal?: unknown
+  limit?: boolean
+  limitPrice?: number
 }
+
+// 限价挂单（二期）：触价自动成交，现金/T+1 不满足留单重试。
+export interface PaperOpenOrder {
+  id: number
+  symbol: string
+  name: string
+  side: 'buy' | 'sell'
+  qty: number
+  limitPrice: number
+  note?: string
+  signal?: unknown
+  status: 'open' | 'filled' | 'cancelled'
+  createdAt: string
+  filledAt?: string
+  filledPrice?: number
+  tradeId?: number
+}
+
+export type PaperOrderResult =
+  | { filled: PaperTrade }
+  | { placed: PaperOpenOrder }
 
 
 // 形态归档：每日筛查定格快照 + 买点后续走势（T+N 从买点日收盘动态计算）。
@@ -675,11 +699,13 @@ export const api = {
   calendar: () => request<CalEvent[]>('/api/news/calendar'),
   paperOverview: () => request<PaperOverview>('/api/paper/overview'),
   paperOrder: (body: PaperOrderInput) =>
-    request<PaperTrade>('/api/paper/orders', {
+    request<PaperOrderResult>('/api/paper/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }),
+  paperCancelOrder: (id: number) =>
+    request<{ ok: boolean }>(`/api/paper/orders/${id}`, { method: 'DELETE' }),
   screenArchive: () =>
     request<{ date: string; counts: Record<string, number>; total: number }>('/api/screen/archive', { method: 'POST' }),
   screenArchiveDates: () => request<string[]>('/api/screen/archives'),

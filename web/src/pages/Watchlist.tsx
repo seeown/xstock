@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type ProfileListItem, type Quote } from '../api'
 import { KlineDetailModal, KlinePopover, useKlinePreview } from '../components/klinePreview'
+import { PaperQuickBuy } from '../components/paperQuickBuy'
 import { Button, Card, EmptyState, KpiCard, pct } from '../components/ui'
 import { useIsActive } from '../shell'
 import { useWatchlist } from '../watchlist'
@@ -146,6 +147,7 @@ export default function Watchlist() {
                       <td className="num muted-c">{q ? fmtAmount(q.amount) : '—'}</td>
                       <td className="muted-c">{item.industry || '—'}</td>
                       <td>
+                        <PaperQuickBuy symbol={item.symbol} name={item.name} />
                         <button className="link-btn" onClick={e => { e.stopPropagation(); navigate(`/?view=backtest&symbol=${item.symbol}`) }}>回测</button>
                       </td>
                     </tr>

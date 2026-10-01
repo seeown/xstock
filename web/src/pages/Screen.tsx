@@ -3,6 +3,7 @@ import type { MouseEvent as ReactMouseEvent, KeyboardEvent as ReactKeyboardEvent
 import { useNavigate } from 'react-router-dom'
 import { api, type Quote, type ScreenResult, type NPSetup, type GuideRealtime, type ArchivedSetup, type ScreenArchiveDay } from '../api'
 import { KlineDetailModal, KlinePopover, useKlinePreview } from '../components/klinePreview'
+import { PaperQuickBuy } from '../components/paperQuickBuy'
 import { Button, Card, EnvBanner, Chip, SearchPill, FilterBar, EmptyState, ErrorBlock, KpiCard, Skeleton, fmt, pct, type EnvTone } from '../components/ui'
 import { useIsActive } from '../shell'
 import { useQueryState } from '../hooks/useQueryState'
@@ -424,7 +425,7 @@ export default function Screen() {
                         <th className="num">颈线</th><th className="num">低吸区(0.382~0.5)</th>
                         <th className="num">回调</th><th className="num">回撤</th><th className="num">回调量比</th>
                         <th>企稳信号</th><th className="num">止损(B低)</th><th className="num">目标</th><th>追高</th>
-                        <th className="num">现价</th><th className="num">当日</th>
+                        <th className="num">现价</th><th className="num">当日</th><th></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -445,6 +446,7 @@ export default function Screen() {
                             <td className="num">{fmt(s.target)}</td>
                             <td>{s.chaseBan ? <span className="down-text">过线</span> : '—'}</td>
                             {quoteCell(s)}
+                            <td><PaperQuickBuy symbol={s.symbol} name={s.name} signal={{ stage: s.stage, keyDate: s.keyDate, asOf: s.asOf }} /></td>
                           </tr>
                           {expanded === rowKey(s) && <ExpandRow s={s} />}
                         </Fragment>
@@ -460,7 +462,7 @@ export default function Screen() {
                         <th>突破日</th><th className="num">突破价</th><th className="num">突破量能</th>
                         <th className="num">颈线</th><th className="num">突破后</th><th>回踩状态</th>
                         <th className="num">止损(B低)</th><th className="num">目标</th><th>追高</th>
-                        <th className="num">现价</th><th className="num">当日</th>
+                        <th className="num">现价</th><th className="num">当日</th><th></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -483,6 +485,7 @@ export default function Screen() {
                             <td className="num">{fmt(s.target)}</td>
                             <td>{s.chaseBan ? <span className="down-text">过线</span> : '—'}</td>
                             {quoteCell(s)}
+                            <td><PaperQuickBuy symbol={s.symbol} name={s.name} signal={{ stage: s.stage, keyDate: s.keyDate, asOf: s.asOf }} /></td>
                           </tr>
                           {expanded === rowKey(s) && <ExpandRow s={s} />}
                         </Fragment>
@@ -497,7 +500,7 @@ export default function Screen() {
                         <th>代码 / 名称</th><th>突破日</th><th className="num">突破价</th>
                         <th>回踩日</th><th className="num">回踩低点</th><th>缩量确认</th>
                         <th className="num">颈线</th><th className="num">止损(B低)</th><th className="num">目标</th>
-                        <th className="num">现价</th><th className="num">当日</th>
+                        <th className="num">现价</th><th className="num">当日</th><th></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -514,6 +517,7 @@ export default function Screen() {
                             <td className="num">{fmt(s.stopLoss)}</td>
                             <td className="num">{fmt(s.target)}</td>
                             {quoteCell(s)}
+                            <td><PaperQuickBuy symbol={s.symbol} name={s.name} signal={{ stage: s.stage, keyDate: s.keyDate, asOf: s.asOf }} /></td>
                           </tr>
                           {expanded === rowKey(s) && <ExpandRow s={s} />}
                         </Fragment>

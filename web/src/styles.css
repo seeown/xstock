@@ -1810,3 +1810,17 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .paper-buy .input { padding: 5px 8px; font-size: 12.5px; }
 .paper-buy .pb-result { font-size: 12px; color: var(--accent); flex-basis: 100%; }
 .paper-buy .pb-result:has(+ *) { }
+
+/* 模拟仓 · 卖出测算条 & 行内快捷买入 */
+.sell-estimate {
+  display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: center;
+  font-size: 12px; color: var(--muted); padding: 8px 10px;
+  border: 1px solid var(--line-soft); border-radius: 8px; background: rgba(255,255,255,.02);
+}
+.sell-estimate b { color: var(--body-c); font-family: var(--mono); font-weight: 600; }
+.sell-estimate .up-text b, .sell-estimate .down-text b { color: inherit; }
+
+.paper-quick { display: inline-flex; align-items: center; gap: 6px; }
+.paper-quick .input { padding: 3px 7px; font-size: 12px; width: 84px; }
+.paper-quick .pq-msg { font-size: 11.5px; color: var(--accent); white-space: nowrap; }
+.btn2-mini.primary { color: #06131f; background: var(--accent); }

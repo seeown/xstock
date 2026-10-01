@@ -4,7 +4,6 @@ import { api, type PaperOverview, type PaperPosition } from '../api'
 import { KlineDetailModal, KlinePopover, useKlinePreview } from '../components/klinePreview'
 import { Button, Card, CardHead, KpiCard, Skeleton, fmt } from '../components/ui'
 import { useIsActive } from '../shell'
-
 // 模拟仓：纸面交易账本（初始 50 万 · T+1 · A股费用口径）。
 // 持仓/曲线随 60 秒快照实时估值；卖出在持仓行内进行；
 // 买入入口在个股 K 线详情弹窗（带当时的雷达信号上下文）。
@@ -79,13 +78,23 @@ export default function Paper() {
     const qty = Math.max(0, Math.floor(Number(sellQty) || 0))
     setBusy(true); setNote('')
     api.paperOrder({ symbol: selling.symbol, name: selling.name, side: 'sell', qty })
-      .then(tr => {
-        setNote(`已卖出 ${tr.symbol} ${tr.qty} 股 @ ${fmt(tr.price)}（费用 ¥${fmt(tr.fee + tr.tax)}）`)
+      .then(res => {
+        if ('filled' in res) {
+          setNote(`已卖出 ${res.filled.symbol} ${res.filled.qty} 股 @ ${fmt(res.filled.price)}（费用 ¥${fmt(res.filled.fee + res.filled.tax)}）`)
+        } else {
+          setNote(`已挂限价卖单：${res.placed.symbol} ${res.placed.qty} 股 @ ${fmt(res.placed.limitPrice)}`)
+        }
         setSelling(null)
         load()
       })
       .catch(e => setNote(e instanceof Error ? e.message : '卖出失败'))
       .finally(() => setBusy(false))
+  }
+
+  const cancelOrder = (id: number) => {
+    api.paperCancelOrder(id)
+      .then(() => { setNote('已撤单'); load() })
+      .catch(e => setNote(e instanceof Error ? e.message : '撤单失败'))
   }
 
   const init = data?.account.initialCash ?? 0
@@ -123,18 +132,42 @@ export default function Paper() {
                 暂无持仓——去个股行情/雷达选票，在 K 线详情弹窗里「模拟买入」
               </div>
             ) : selling ? (
-              <div className="fbar" style={{ padding: '6px 2px 2px' }}>
-                <span className="muted-c" style={{ fontSize: 12.5 }}>
-                  卖出 {selling.symbol} {selling.name} · 现价 {fmt(selling.lastPrice)} · 可卖 {selling.availQty} 股
-                </span>
-                <input
-                  className="input" style={{ flex: '0 0 110px' }} type="number" min={100} step={100}
-                  value={sellQty}
-                  onChange={e => setSellQty(e.target.value)}
-                  placeholder={String(selling.availQty)}
-                />
-                <Button onClick={confirmSell} loading={busy}>确认卖出</Button>
-                <Button variant="ghost" onClick={() => setSelling(null)}>取消</Button>
+              <div style={{ padding: '6px 2px 2px' }}>
+                <div className="fbar" style={{ marginBottom: 8 }}>
+                  <span className="muted-c" style={{ fontSize: 12.5 }}>
+                    卖出 {selling.symbol} {selling.name} · 现价 {fmt(selling.lastPrice)} · 可卖 {selling.availQty} 股 · 成本 {fmt(selling.costPrice)}
+                  </span>
+                  <input
+                    className="input" style={{ flex: '0 0 110px' }} type="number" min={100} step={100}
+                    value={sellQty}
+                    onChange={e => setSellQty(e.target.value)}
+                    placeholder={String(selling.availQty)}
+                  />
+                  <Button onClick={confirmSell} loading={busy}>确认卖出</Button>
+                  <Button variant="ghost" onClick={() => setSelling(null)}>取消</Button>
+                </div>
+                {(() => {
+                  // 盈亏测算：按现价估算成交额、费用与净盈亏（实际以成交价为准）
+                  const sq = Math.min(Math.max(0, Math.floor(Number(sellQty) || 0)), selling.availQty)
+                  if (sq < 100) return null
+                  const amt = selling.lastPrice * sq
+                  const fee = Math.max(5, amt * 0.00025) + amt * 0.00001
+                  const tax = amt * 0.0005
+                  const net = amt - fee - tax
+                  const cost = selling.costPrice * sq
+                  const pnl = net - cost
+                  const pnlPct = cost > 0 ? pnl / cost * 100 : 0
+                  return (
+                    <div className="sell-estimate">
+                      <span>预估成交 <b>{money(amt)}</b></span>
+                      <span>费用+税 <b>{money(fee + tax)}</b></span>
+                      <span>净入账 <b>{money(net)}</b></span>
+                      <span className={signCls(pnl)}>
+                        卖出净盈亏 <b>{pnl >= 0 ? '+' : '-'}{money(Math.abs(pnl))}（{pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%）</b>
+                      </span>
+                    </div>
+                  )
+                })()}
               </div>
             ) : (
               <div className="table-wrap">
@@ -182,6 +215,45 @@ export default function Paper() {
             <CardHead title="净值曲线" sub="每日收盘记一点；查看页面时实时刷新当日" />
             <EquityCurve points={data.curve} initial={init} />
           </Card>
+
+          {(data.orders ?? []).filter(o => o.status === 'open').length > 0 && (
+            <Card>
+              <CardHead title="限价挂单" sub="每 30 秒随快照检查触价：买入 ≤ 限价 / 卖出 ≥ 限价即自动成交；现金或 T+1 不满足时留单重试" />
+              <div className="table-wrap">
+                <table className="tb">
+                  <thead>
+                    <tr><th>挂单时间</th><th>股票</th><th>方向</th><th className="num">限价</th><th className="num">数量</th><th>现价触达</th><th>备注 / 信号</th><th></th></tr>
+                  </thead>
+                  <tbody>
+                    {(data.orders ?? []).filter(o => o.status === 'open').map(o => {
+                      const pos = data.positions.find(p => p.symbol === o.symbol)
+                      const last = pos?.lastPrice ?? 0
+                      const near = last > 0
+                        ? (o.side === 'buy'
+                          ? `差 ${(((last - o.limitPrice) / o.limitPrice) * 100).toFixed(2)}%`
+                          : `差 ${(((o.limitPrice - last) / o.limitPrice) * 100).toFixed(2)}%`)
+                        : ''
+                      const sig = o.signal as { stage?: string } | undefined
+                      return (
+                        <tr key={o.id}>
+                          <td className="mono muted-c" style={{ fontSize: 11 }}>{o.createdAt}</td>
+                          <td><span className="code">{o.symbol}</span><span className="name">{o.name}</span></td>
+                          <td><span className={`badge-run ${o.side === 'sell' ? 'sell' : ''}`}>{o.side === 'buy' ? '限价买' : '限价卖'}</span></td>
+                          <td className="num">{fmt(o.limitPrice)}</td>
+                          <td className="num">{o.qty}</td>
+                          <td className="num muted-c">{last > 0 ? `现价 ${fmt(last)} · ${near}` : '—'}</td>
+                          <td className="muted-c" style={{ fontSize: 11.5 }}>
+                            {sig?.stage ? <span className="badge-run">{sig.stage.toUpperCase()}</span> : null}{' '}{o.note || ''}
+                          </td>
+                          <td><Button variant="mini-danger" onClick={() => cancelOrder(o.id)}>撤单</Button></td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
 
           <Card>
             <CardHead title="成交流水" sub={`共 ${data.trades.length} 笔（近 200）· 买入记录当时的雷达信号，复盘可回溯`} />

@@ -63,6 +63,23 @@ CREATE TABLE IF NOT EXISTS paper_trades (
 	traded_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS paper_trades_acct_idx ON paper_trades (account_id, traded_at DESC);
+CREATE TABLE IF NOT EXISTS paper_open_orders (
+	id          BIGSERIAL PRIMARY KEY,
+	account_id  BIGINT NOT NULL REFERENCES paper_accounts(id),
+	symbol      TEXT NOT NULL,
+	name        TEXT NOT NULL DEFAULT '',
+	side        TEXT NOT NULL,
+	qty         INTEGER NOT NULL,
+	limit_price DOUBLE PRECISION NOT NULL,
+	note        TEXT NOT NULL DEFAULT '',
+	signal      JSONB,
+	status      TEXT NOT NULL DEFAULT 'open', -- open | filled | cancelled
+	created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+	filled_at   TIMESTAMPTZ,
+	filled_price DOUBLE PRECISION,
+	trade_id    BIGINT
+);
+CREATE INDEX IF NOT EXISTS paper_open_orders_acct_idx ON paper_open_orders (account_id, status, created_at DESC);
 CREATE TABLE IF NOT EXISTS paper_equity_curve (
 	account_id  BIGINT NOT NULL REFERENCES paper_accounts(id),
 	date        TEXT NOT NULL,
@@ -254,4 +271,170 @@ func (s *Store) PaperEquityCurve(ctx context.Context, acctID int64) ([]PaperEqui
 		out = append(out, p)
 	}
 	return out, rows.Err()
+}
+
+// PaperOpenOrder 限价挂单（未成交视角，已成交/已撤单也随列表返回）。
+type PaperOpenOrder struct {
+	ID         int64           `json:"id"`
+	Symbol     string          `json:"symbol"`
+	Name       string          `json:"name"`
+	Side       string          `json:"side"`
+	Qty        int             `json:"qty"`
+	LimitPrice float64         `json:"limitPrice"`
+	Note       string          `json:"note,omitempty"`
+	Signal     json.RawMessage `json:"signal,omitempty"`
+	Status     string          `json:"status"`
+	CreatedAt  string          `json:"createdAt"`
+	FilledAt   string          `json:"filledAt,omitempty"`
+	FilledPrice float64        `json:"filledPrice,omitempty"`
+	TradeID    int64           `json:"tradeId,omitempty"`
+}
+
+// CreatePaperOrder 挂一张限价单（仅校验基础合法性，资金/持仓校验在触发时做）。
+func (s *Store) CreatePaperOrder(ctx context.Context, acctID int64, o PaperOpenOrder) (PaperOpenOrder, error) {
+	if err := s.ensurePaperSchema(ctx); err != nil {
+		return PaperOpenOrder{}, err
+	}
+	var sig any
+	if len(o.Signal) > 0 {
+		sig = string(o.Signal)
+	}
+	err := s.db.QueryRowContext(ctx, `
+		INSERT INTO paper_open_orders (account_id, symbol, name, side, qty, limit_price, note, signal)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+		RETURNING id, to_char(created_at AT TIME ZONE 'Asia/Shanghai', 'YYYY-MM-DD HH24:MI')`,
+		acctID, o.Symbol, o.Name, o.Side, o.Qty, o.LimitPrice, o.Note, sig,
+	).Scan(&o.ID, &o.CreatedAt)
+	if err != nil {
+		return PaperOpenOrder{}, fmt.Errorf("insert paper order: %w", err)
+	}
+	return o, nil
+}
+
+// PaperOpenOrders 挂单列表（状态过滤，新 → 旧）。
+func (s *Store) PaperOpenOrders(ctx context.Context, acctID int64, status string) ([]PaperOpenOrder, error) {
+	if err := s.ensurePaperSchema(ctx); err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, symbol, name, side, qty, limit_price, note, COALESCE(signal::text,''), status,
+		       to_char(created_at AT TIME ZONE 'Asia/Shanghai', 'MM-DD HH24:MI'),
+		       COALESCE(to_char(filled_at AT TIME ZONE 'Asia/Shanghai', 'MM-DD HH24:MI'), ''),
+		       COALESCE(filled_price, 0), COALESCE(trade_id, 0)
+		FROM paper_open_orders WHERE account_id = $1 AND ($2 = '' OR status = $2)
+		ORDER BY id DESC LIMIT 100`, acctID, status)
+	if err != nil {
+		return nil, fmt.Errorf("query paper orders: %w", err)
+	}
+	defer rows.Close()
+	out := make([]PaperOpenOrder, 0, 8)
+	for rows.Next() {
+		var o PaperOpenOrder
+		var sig string
+		if err := rows.Scan(&o.ID, &o.Symbol, &o.Name, &o.Side, &o.Qty, &o.LimitPrice, &o.Note,
+			&sig, &o.Status, &o.CreatedAt, &o.FilledAt, &o.FilledPrice, &o.TradeID); err != nil {
+			return nil, err
+		}
+		if sig != "" && sig != "null" {
+			o.Signal = json.RawMessage(sig)
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
+// OpenOrdersWithAccount 撮合主路径：open 单连同所属账户。
+type OpenOrderWithAcct struct {
+	PaperOpenOrder
+	AccountID int64
+}
+
+func (s *Store) OpenOrdersWithAccount(ctx context.Context) ([]OpenOrderWithAcct, error) {
+	if err := s.ensurePaperSchema(ctx); err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, account_id, symbol, name, side, qty, limit_price, note, COALESCE(signal::text,'')
+		FROM paper_open_orders WHERE status = 'open' ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]OpenOrderWithAcct, 0, 4)
+	for rows.Next() {
+		var o OpenOrderWithAcct
+		var sig string
+		if err := rows.Scan(&o.ID, &o.AccountID, &o.Symbol, &o.Name, &o.Side, &o.Qty, &o.LimitPrice, &o.Note, &sig); err != nil {
+			return nil, err
+		}
+		if sig != "" && sig != "null" {
+			o.Signal = json.RawMessage(sig)
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
+// CancelPaperOrder 撤单（仅 open 可撤）。
+func (s *Store) CancelPaperOrder(ctx context.Context, acctID, orderID int64) error {
+	if err := s.ensurePaperSchema(ctx); err != nil {
+		return err
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE paper_open_orders SET status = 'cancelled' WHERE id = $1 AND account_id = $2 AND status = 'open'`,
+		orderID, acctID)
+	if err != nil {
+		return fmt.Errorf("cancel paper order: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("挂单不存在或已成交/已撤销")
+	}
+	return nil
+}
+
+// MatchPaperOrder 限价触发成交：落 trade + 标记挂单（同一事务）。
+func (s *Store) MatchPaperOrder(ctx context.Context, acctID, orderID int64, t PaperTrade, fillPrice float64) (PaperTrade, error) {
+	if err := s.ensurePaperSchema(ctx); err != nil {
+		return PaperTrade{}, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return PaperTrade{}, err
+	}
+	defer tx.Rollback()
+	var delta float64
+	if t.Side == "buy" {
+		delta = -(t.Amount + t.Fee)
+	} else {
+		delta = t.Amount - t.Fee - t.Tax
+	}
+	res, err := tx.ExecContext(ctx,
+		`UPDATE paper_accounts SET cash = cash + $2 WHERE id = $1 AND cash + $2 >= -0.005`, acctID, delta)
+	if err != nil {
+		return PaperTrade{}, fmt.Errorf("update paper cash: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return PaperTrade{}, fmt.Errorf("现金不足")
+	}
+	var sig any
+	if len(t.Signal) > 0 {
+		sig = string(t.Signal)
+	}
+	if err := tx.QueryRowContext(ctx,
+		`INSERT INTO paper_trades (account_id, symbol, name, side, price, qty, amount, fee, tax, note, signal)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+		acctID, t.Symbol, t.Name, t.Side, t.Price, t.Qty, t.Amount, t.Fee, t.Tax, t.Note, sig,
+	).Scan(&t.ID); err != nil {
+		return PaperTrade{}, fmt.Errorf("insert matched trade: %w", err)
+	}
+	cres, err := tx.ExecContext(ctx,
+		`UPDATE paper_open_orders SET status = 'filled', filled_at = now(), filled_price = $2, trade_id = $3
+		 WHERE id = $1 AND status = 'open'`, orderID, fillPrice, t.ID)
+	if err != nil {
+		return PaperTrade{}, fmt.Errorf("mark order filled: %w", err)
+	}
+	if n, _ := cres.RowsAffected(); n == 0 {
+		return PaperTrade{}, fmt.Errorf("挂单已被撤或已成交")
+	}
+	return t, tx.Commit()
 }
