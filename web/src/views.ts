@@ -5,6 +5,7 @@ import DataManager from './pages/DataManager'
 import Guide from './pages/Guide'
 import Market from './pages/Market'
 import News from './pages/News'
+import Paper from './pages/Paper'
 import Screen from './pages/Screen'
 import Stocks from './pages/Stocks'
 import Strategy from './pages/Strategy'
@@ -26,11 +27,12 @@ export const VIEWS: ViewDef[] = [
   { key: 'auction', path: '/auction', label: '竞价异动', no: '02', Component: Auction },
   { key: 'screen', path: '/screen', label: '股票雷达', no: '03', Component: Screen },
   { key: 'watchlist', path: '/watchlist', label: '自选股', no: '04', Component: Watchlist },
-  { key: 'market', path: '/market', label: '大盘行情', no: '05', Component: Market },
-  { key: 'stocks', path: '/stocks', label: '个股行情', no: '06', Component: Stocks },
-  { key: 'backtest', path: '/', label: '回测分析', no: '07', Component: Dashboard },
-  { key: 'strategy', path: '/strategy', label: '策略说明', no: '08', Component: Strategy },
-  { key: 'data', path: '/data', label: '数据管理', no: '09', Component: DataManager },
+  { key: 'paper', path: '/paper', label: '模拟仓', no: '05', Component: Paper },
+  { key: 'market', path: '/market', label: '大盘行情', no: '06', Component: Market },
+  { key: 'stocks', path: '/stocks', label: '个股行情', no: '07', Component: Stocks },
+  { key: 'backtest', path: '/', label: '回测分析', no: '08', Component: Dashboard },
+  { key: 'strategy', path: '/strategy', label: '策略说明', no: '09', Component: Strategy },
+  { key: 'data', path: '/data', label: '数据管理', no: '10', Component: DataManager },
 ]
 
 // 裸 `/`(无 ?view=)默认落在盘前资讯——开盘前先看资讯再看行情。

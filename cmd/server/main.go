@@ -336,6 +336,9 @@ func main() {
 	ns := newNewsService()
 	newsRoutes(mux, s, ns)
 
+	// 模拟仓：纸面交易账本 + 市价撮合。
+	paperRoutes(mux, s, quoteCache, ov)
+
 	// GET /api/auction — 竞价异动分层读数（自选/梯队/点火/异动榜 + 晨报三问）。
 	// 交易日 9:30 后的首次请求顺手归档（定格 bars + 晨报 JSONB，幂等）。
 	mux.HandleFunc("GET /api/auction", func(w http.ResponseWriter, r *http.Request) {

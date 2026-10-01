@@ -458,8 +458,7 @@ export interface OvernightCell {
 }
 
 // 盘前资讯二期：巨潮公告 + 财经日历。
-export interface Announcement {
-  symbol: string
+export interface Announcement {  symbol: string
   name: string
   title: string
   time: string
@@ -477,6 +476,72 @@ export interface CalEvent {
   note?: string
   hot?: boolean
 }
+
+// 模拟仓：纸面交易（A股口径：T+1、100 股整数手、佣金+过户双边、印花税卖出）。
+export interface PaperAccount {
+  id: number
+  name: string
+  initialCash: number
+  cash: number
+}
+
+export interface PaperTrade {
+  id: number
+  symbol: string
+  name: string
+  side: 'buy' | 'sell'
+  price: number
+  qty: number
+  amount: number
+  fee: number
+  tax: number
+  note?: string
+  signal?: unknown
+  tradedAt: string
+}
+
+export interface PaperPosition {
+  symbol: string
+  name: string
+  qty: number
+  availQty: number
+  costPrice: number
+  lastPrice: number
+  marketValue: number
+  pnl: number
+  pnlPct: number
+  dayPnl: number
+  dayChgPct: number
+}
+
+export interface PaperEquityPoint {
+  date: string
+  cash: number
+  marketValue: number
+  total: number
+}
+
+export interface PaperOverview {
+  account: PaperAccount
+  cash: number
+  marketValue: number
+  total: number
+  totalPnl: number
+  dayPnl: number
+  positions: PaperPosition[]
+  trades: PaperTrade[]
+  curve: PaperEquityPoint[]
+}
+
+export interface PaperOrderInput {
+  symbol: string
+  name: string
+  side: 'buy' | 'sell'
+  qty: number
+  note?: string
+  signal?: unknown
+}
+
 
 // 形态归档：每日筛查定格快照 + 买点后续走势（T+N 从买点日收盘动态计算）。
 export interface ArchivedSetup extends NPSetup {
@@ -608,6 +673,13 @@ export const api = {
   overnight: () => request<OvernightCell[]>('/api/news/overnight'),
   announcements: () => request<Announcement[]>('/api/news/announcements'),
   calendar: () => request<CalEvent[]>('/api/news/calendar'),
+  paperOverview: () => request<PaperOverview>('/api/paper/overview'),
+  paperOrder: (body: PaperOrderInput) =>
+    request<PaperTrade>('/api/paper/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
   screenArchive: () =>
     request<{ date: string; counts: Record<string, number>; total: number }>('/api/screen/archive', { method: 'POST' }),
   screenArchiveDates: () => request<string[]>('/api/screen/archives'),

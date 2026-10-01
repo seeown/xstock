@@ -280,7 +280,53 @@ export function KlineDetailModal({ state, onClose, onOpenBacktest }: {
             ))}
           </div>
         )}
+        <PaperBuyBar state={state} />
       </div>
+    </div>
+  )
+}
+
+// 模拟买入条：数量 + 备注（自动带上当时的雷达信号），预估金额与费用，
+// 成交价以服务端撮合为准（盘中=实时快照，盘外=最后收盘）。
+function PaperBuyBar({ state }: { state: KlineDetailState }) {
+  const [qty, setQty] = useState('100')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState('')
+
+  const refPrice = state.bars?.length ? state.bars[state.bars.length - 1].close : 0
+  const q = Math.max(0, Math.floor(Number(qty) || 0))
+  const est = refPrice > 0 ? refPrice * q : 0
+  const estFee = est > 0 ? Math.max(5, est * 0.00025) + est * 0.00001 : 0
+
+  const submit = () => {
+    setBusy(true); setResult('')
+    api.paperOrder({
+      symbol: state.symbol, name: state.name ?? '', side: 'buy', qty: q, note: note.trim() || undefined,
+      signal: state.setup ? { stage: state.setup.stage, keyDate: state.setup.keyDate, asOf: state.setup.asOf } : undefined,
+    })
+      .then(tr => setResult(`✓ 已成交 ${tr.side === 'buy' ? '买入' : '卖出'} ${tr.symbol} ${tr.qty} 股 @ ${fmt(tr.price)} · 费用 ¥${fmt(tr.fee + tr.tax)}（详见模拟仓）`))
+      .catch(e => setResult('✗ ' + (e instanceof Error ? e.message : '下单失败')))
+      .finally(() => setBusy(false))
+  }
+
+  return (
+    <div className="paper-buy">
+      <span className="pb-title">模拟买入</span>
+      <span className="muted-c" style={{ fontSize: 11.5 }}>
+        {state.setup ? `带 ${stageLabel[state.setup.stage]} 信号` : '普通买入'} · 参考价 {refPrice > 0 ? fmt(refPrice) : '—'}（成交价以服务端为准）
+      </span>
+      <input className="input" type="number" min={100} step={100} value={qty}
+        onChange={e => setQty(e.target.value)} style={{ flex: '0 0 96px' }} aria-label="买入数量" />
+      <span className="muted-c" style={{ fontSize: 11.5 }}>
+        {est > 0 ? `≈¥${fmt(est + estFee)}（含费）` : ''}
+      </span>
+      <input className="input" value={note} onChange={e => setNote(e.target.value)}
+        placeholder="备注（买入理由，可留空）" style={{ flex: '1 1 160px', minWidth: 120 }} />
+      <button className="btn small primary" disabled={busy || q < 100 || q % 100 !== 0} onClick={submit}>
+        {busy ? '下单中…' : '买入'}
+      </button>
+      {result && <span className="pb-result" role="status">{result}</span>}
     </div>
   )
 }
