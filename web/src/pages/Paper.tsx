@@ -10,6 +10,9 @@ import { useIsActive } from '../shell'
 
 const money = (v: number) => '¥' + fmt(v)
 const signCls = (v: number) => (v > 0 ? 'up-text' : v < 0 ? 'down-text' : '')
+// 金额/百分比的显式符号：正 +、负 −、零不带——颜色只是辅助，符号必须自明
+const signed = (v: number) => (v > 0 ? '+' : v < 0 ? '-' : '')
+const signedMoney = (v: number) => `${signed(v)}${money(Math.abs(v))}`
 
 function EquityCurve({ points, initial }: { points: PaperOverview['curve']; initial: number }) {
   const W = 720, H = 150, M = { l: 46, r: 12, t: 12, b: 20 }
@@ -121,8 +124,8 @@ export default function Paper() {
             <KpiCard tone="a" label="总资产" value={money(data.total)} hint={`累计 ${data.totalPnl >= 0 ? '+' : ''}${money(data.totalPnl).slice(1)}（${retPct >= 0 ? '+' : ''}${retPct.toFixed(2)}%）`} />
             <KpiCard tone="p" label="可用现金" value={money(data.cash)} />
             <KpiCard tone="o" label="持仓市值" value={money(data.marketValue)} hint={`${data.positions.length} 只持仓`} />
-            <KpiCard tone="g" label="今日盈亏" value={`${data.dayPnl >= 0 ? '+' : ''}${money(Math.abs(data.dayPnl))}`} valueClass={signCls(data.dayPnl)} />
-            <KpiCard tone="g" label="累计盈亏" value={`${data.totalPnl >= 0 ? '+' : ''}${money(Math.abs(data.totalPnl))}`} valueClass={signCls(data.totalPnl)} />
+            <KpiCard tone="g" label="今日盈亏" value={signedMoney(data.dayPnl)} valueClass={signCls(data.dayPnl)} />
+            <KpiCard tone="g" label="累计盈亏" value={signedMoney(data.totalPnl)} valueClass={signCls(data.totalPnl)} />
           </div>
 
           <Card>
@@ -192,11 +195,11 @@ export default function Paper() {
                         <td className={`num ${p.availQty < p.qty ? 'muted' : ''}`}>{p.availQty}</td>
                         <td className="num">{fmt(p.costPrice)}</td>
                         <td className="num">{fmt(p.lastPrice)}</td>
-                        <td className={`num ${signCls(p.dayChgPct)}`}>{p.dayChgPct >= 0 ? '+' : ''}{p.dayChgPct.toFixed(2)}%</td>
+                        <td className={`num ${signCls(p.dayChgPct)}`}>{signed(p.dayChgPct)}{p.dayChgPct.toFixed(2)}%</td>
                         <td className="num">{money(p.marketValue)}</td>
-                        <td className={`num ${signCls(p.pnl)}`}>{p.pnl >= 0 ? '+' : ''}{money(Math.abs(p.pnl))}</td>
-                        <td className={`num ${signCls(p.pnl)}`}>{p.pnlPct >= 0 ? '+' : ''}{p.pnlPct.toFixed(2)}%</td>
-                        <td className={`num ${signCls(p.dayPnl)}`}>{p.dayPnl >= 0 ? '+' : ''}{money(Math.abs(p.dayPnl))}</td>
+                        <td className={`num ${signCls(p.pnl)}`}>{signedMoney(p.pnl)}</td>
+                        <td className={`num ${signCls(p.pnl)}`}>{signed(p.pnlPct)}{p.pnlPct.toFixed(2)}%</td>
+                        <td className={`num ${signCls(p.dayPnl)}`}>{signedMoney(p.dayPnl)}</td>
                         <td>
                           <Button
                             variant="mini" disabled={p.availQty < 100}
