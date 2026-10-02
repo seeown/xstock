@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
 	"time"
@@ -47,25 +48,45 @@ func paperFees(side string, amount float64) (fee, tax float64) {
 	return round2f(fee), round2f(tax)
 }
 
-// paperQuote 快照里的实时行情（无则零值）。
-func paperQuote(qc *quotes.Cache, symbol string) (price, chgPct float64) {
+// paperQuoteToday 估值口径三件套：现价、昨收、是否有"今日"行情。
+// 判定链（自洽于所有场景——盘中/收盘后/假期定格/次日开盘前）：
+//  1. 日线含今日 bar（叠加层实时拼出或收盘已落库）→ 有今日行情，
+//     昨收 = 倒数第二根收盘；
+//  2. 否则看快照：快照昨收 == 最近落库收盘 才是"活的今日盘中"
+//     （真交易日的昨收口径就是上一交易日收盘）；对不上说明快照是
+//     休市定格（通达信在假期返回上个交易日的快照，其昨收是上上个
+//     交易日）→ 无今日行情，今日盈亏/当日涨幅必须为 0。
+func paperQuoteToday(s *store.Store, qc *quotes.Cache, ov *overlay, symbol, today string) (price, preClose float64, hasToday bool) {
 	snap := qc.Snapshot()
-	q, ok := snap[symbol]
-	if !ok || q.Price <= 0 {
-		return 0, 0
+	q, hasSnap := snap[symbol]
+	if hasSnap && q.Price <= 0 {
+		hasSnap = false
 	}
-	return q.Price, q.ChangePct
+	bars := ov.Bars(s, symbol)
+	if len(bars) >= 2 && bars[len(bars)-1].Date == today {
+		p := bars[len(bars)-1].Close
+		if hasSnap {
+			p = q.Price // 盘中实时价优先于叠加 bar
+		}
+		return p, bars[len(bars)-2].Close, true
+	}
+	if hasSnap {
+		if len(bars) > 0 && math.Abs(q.PreClose-bars[len(bars)-1].Close) <= 0.011 {
+			return q.Price, q.PreClose, true
+		}
+		return q.Price, q.Price, false // 定格快照：价格可用，但没有今日行情
+	}
+	if len(bars) > 0 {
+		return bars[len(bars)-1].Close, bars[len(bars)-1].Close, false
+	}
+	return 0, 0, false
 }
 
-// paperPrice 服务端定价：实时快照优先，回落日线最后收盘。
+// paperPrice 服务端定价（下单用，只要一个可用价格）：快照优先，
+// 回落日线最后收盘。
 func paperPrice(s *store.Store, qc *quotes.Cache, ov *overlay, symbol string) float64 {
-	if p, _ := paperQuote(qc, symbol); p > 0 {
-		return p
-	}
-	if bars := ov.Bars(s, symbol); len(bars) > 0 {
-		return bars[len(bars)-1].Close
-	}
-	return 0
+	price, _, _ := paperQuoteToday(s, qc, ov, symbol, time.Now().Format("2006-01-02"))
+	return price
 }
 
 type paperOrderReq struct {
@@ -94,12 +115,7 @@ func paperOverview(r *http.Request, s *store.Store, qc *quotes.Cache, ov *overla
 	marketValue := 0.0
 	dayPnl := 0.0
 	for _, p := range raws {
-		last, chgPct := paperQuote(qc, p.Symbol)
-		if last <= 0 {
-			if bars := ov.Bars(s, p.Symbol); len(bars) > 0 {
-				last = bars[len(bars)-1].Close
-			}
-		}
+		last, preClose, hasToday := paperQuoteToday(s, qc, ov, p.Symbol, today)
 		mv := round2f(last * float64(p.Qty))
 		marketValue += mv
 		cost := round2f(p.CostPrice * float64(p.Qty))
@@ -108,13 +124,16 @@ func paperOverview(r *http.Request, s *store.Store, qc *quotes.Cache, ov *overla
 		if cost > 0 {
 			pnlPct = round2f(mv/cost*100 - 100)
 		}
-		// 当日盈亏：隔夜仓由当日涨幅反推今晨成本；今日买入部分从成交价
-		// （含费）起算——当天建仓的票不能把隔夜涨幅算成"今日盈亏"。
-		dp := 0.0
-		overnight := p.Qty - p.TodayQty
-		if overnight > 0 && chgPct != 0 {
-			overnightMV := last * float64(overnight)
-			dp += overnightMV - overnightMV/(1+chgPct/100)
+		// 当日盈亏/当日涨幅：没有今日行情（假期、次日开盘前快照定格）
+		// 一律为 0——昨日涨幅不属于今天，更不属于收盘后才建仓的持仓。
+		// 隔夜仓 = 数量 × (现价 − 昨收) 直算；今日买入部分从成交价（含
+		// 费）起算。恒等式验收：各日盈亏之和 = 累计盈亏。
+		chgPct, dp := 0.0, 0.0
+		if hasToday && preClose > 0 {
+			chgPct = round2f((last/preClose - 1) * 100)
+			if overnight := p.Qty - p.TodayQty; overnight > 0 {
+				dp += (last - preClose) * float64(overnight)
+			}
 		}
 		if p.TodayQty > 0 {
 			dp += last*float64(p.TodayQty) - p.TodayCost
