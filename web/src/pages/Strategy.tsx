@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api, type ParamSet, type RadarParams, type StrategyKind, type StrategyParams } from '../api'
+import { useRadarWatch } from '../radarWatch'
 import { Button, Card, CardHead, TextField } from '../components/ui'
 
 const rules = [
@@ -226,6 +227,7 @@ export default function Strategy() {
   }, [])
 
   // ── 雷达默认：股票雷达与「立即归档」共用的独立参数槽位 ──
+  const { days: radarDays, scan: rescanRadar } = useRadarWatch()
   const [radar, setRadar] = useState<RadarParams | null>(null)
   const [radarDraft, setRadarDraft] = useState<Record<string, number | boolean> | null>(null)
   const [radarNote, setRadarNote] = useState('')
@@ -261,7 +263,9 @@ export default function Strategy() {
       setRadarDraft(null)
       await reload()
       await reloadRadar()
-      setRadarNote(radarGroup ? '修改已保存，雷达下轮扫描生效' : '已建「雷达默认」组并设为生效，雷达下轮扫描生效')
+      // 立即用新参数重扫并重建基线——防止参数变化导致的结果集差异被当成"新票"误报。
+      rescanRadar(radarDays)
+      setRadarNote(radarGroup ? '修改已保存，雷达已用新参数重扫' : '已建「雷达默认」组并设为生效，雷达已重扫')
     } catch (e) {
       setRadarNote(e instanceof Error ? e.message : '保存失败')
     } finally {
@@ -275,7 +279,8 @@ export default function Strategy() {
       await api.clearDefaultParamSet('radar')
       await reload()
       await reloadRadar()
-      setRadarNote('已恢复内置默认（雷达下轮扫描生效）')
+      rescanRadar(radarDays)
+      setRadarNote('已恢复内置默认（雷达已重扫）')
     } catch (e) {
       setRadarNote(e instanceof Error ? e.message : '操作失败')
     } finally {

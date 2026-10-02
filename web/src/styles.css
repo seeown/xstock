@@ -1380,6 +1380,26 @@ table.tb { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 }
 .toast .x:hover { color: var(--ink); }
 
+/* ---- 全局雷达新票 toast：复用 .toast 皮，多条堆叠、可点击跳雷达页 ---- */
+.toast-stack {
+  position: fixed; top: 68px; right: 22px; z-index: 90;
+  width: min(340px, calc(100vw - 44px));
+  display: flex; flex-direction: column; gap: 10px;
+  pointer-events: none;
+}
+.toast-radar {
+  pointer-events: auto; cursor: pointer; font: inherit;
+  border-left: 3px solid var(--accent);
+  animation: toast-in .28s ease-out;
+}
+.toast-radar:hover { background: rgba(13, 27, 51, .97); border-left-color: #7dd3fc; }
+.toast-radar .tt { display: block; }
+.toast-radar .td { display: block; color: var(--accent); }
+@keyframes toast-in {
+  from { transform: translateX(26px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
 /* ---- 连接状态点 ---- */
 .conn { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
 .conn .dot {

@@ -1,11 +1,11 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent, KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, type Quote, type ScreenResult, type NPSetup, type GuideRealtime, type ArchivedSetup, type ScreenArchiveDay } from '../api'
+import { api, type Quote, type NPSetup, type GuideRealtime, type ArchivedSetup, type ScreenArchiveDay } from '../api'
+import { sigKey, useRadarWatch } from '../radarWatch'
 import { KlineDetailModal, KlinePopover, useKlinePreview } from '../components/klinePreview'
 import { PaperQuickBuy } from '../components/paperQuickBuy'
 import { Button, Card, EnvBanner, Chip, SearchPill, FilterBar, EmptyState, ErrorBlock, KpiCard, Skeleton, fmt, pct, type EnvTone } from '../components/ui'
-import { useIsActive } from '../shell'
 import { useQueryState } from '../hooks/useQueryState'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 
@@ -36,12 +36,10 @@ function envOf(rt: GuideRealtime | null): { tone: EnvTone; desc: string; time: s
 
 export default function Screen() {
   const navigate = useNavigate()
-  const isActiveView = useIsActive()
-  const [days, setDays] = useState(10)
-  const [daysInput, setDaysInput] = useState('10')
-  const [result, setResult] = useState<ScreenResult | null>(null)
-  const [running, setRunning] = useState(false)
-  const [error, setError] = useState('')
+  // 数据源在全局 RadarWatchProvider（交易时段 60s 轮询 + 新票 diff 基线）：
+  // 页面只订阅展示——人在别的页面，监控和通知照常运转。
+  const { result, running, error, days, flashKeys, freshNote, scan } = useRadarWatch()
+  const [daysInput, setDaysInput] = useState(String(days))
   const [page, setPage] = useState(1)
   const [quotes, setQuotes] = useState<Record<string, Quote>>({})
   const [guide, setGuide] = useState<GuideRealtime | null>(null)
@@ -53,81 +51,17 @@ export default function Screen() {
   const [archiving, setArchiving] = useState(false)
   const [archNote, setArchNote] = useState('')
 
-  // ---- 60 秒自动轮询：新票闪光 ----
-  // 信号键带 stage：同一票从 B2 演进到 B3 算新信号。
-  const sigKey = (s: NPSetup) => `${s.symbol}|${s.stage}|${s.keyDate}`
-  const baselineRef = useRef<Set<string> | null>(null) // 上一轮信号键基线
-  const [newKeys, setNewKeys] = useState<Set<string>>(new Set())
-  const [newNote, setNewNote] = useState('')
-  const runningRef = useRef(false)
-
   // 筛选状态进 URL：可分享、可回退（stage / 搜索词）
   const [stageParam, setStageParam] = useQueryState('stage')
   const [qParam, setQParam] = useQueryState('q')
   const tab: Stage = stageParam === 'b2' || stageParam === 'b3' ? stageParam : 'b1'
   const searchRef = useRef<HTMLInputElement>(null)
 
-  // 手动扫描（挂载/改窗口/R 键）：重建基线、重置分页选择——不算新票。
-  const run = (d: number) => {
-    setRunning(true); runningRef.current = true
-    setError('')
-    api.screen(d)
-      .then(res => {
-        setResult(res)
-        baselineRef.current = new Set(res.items.map(sigKey))
-        setNewKeys(new Set()); setNewNote('')
-        setPage(1)
-        setSel(-1)
-        setExpanded(null)
-      })
-      .catch(e => setError(e instanceof Error ? e.message : '筛查失败'))
-      .finally(() => { setRunning(false); runningRef.current = false })
-  }
-
-  // 轮询轮：不动分页/选择/展开，diff 出新票闪光；失败静默（下一轮再试）。
-  const pollRound = (d: number) => {
-    api.screen(d)
-      .then(res => {
-        const base = baselineRef.current
-        const keys = new Set(res.items.map(sigKey))
-        setResult(res)
-        baselineRef.current = keys
-        if (base) {
-          const fresh = res.items.filter(i => !base.has(sigKey(i)))
-          if (fresh.length) {
-            setNewKeys(new Set(fresh.map(sigKey)))
-            const names = fresh.slice(0, 3).map(f => f.name || f.symbol).join('、')
-            setNewNote(`本轮新增 ${fresh.length} 只${names ? `：${names}${fresh.length > 3 ? ' 等' : ''}` : ''}`)
-          } else {
-            setNewKeys(new Set())
-          }
-        }
-      })
-      .catch(() => {})
-  }
-
-  // 挂载即扫一次 + 顺带取大盘温度（横幅）与归档日期列表；失败静默。
+  // 大盘温度（横幅）与归档日期列表；雷达首扫在 Provider 完成。
   useEffect(() => {
-    run(days)
     api.marketGuide().then(g => setGuide(g.realtime)).catch(() => {})
     api.screenArchiveDates().then(setArchDates).catch(() => {})
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // 激活期间每 60 秒自动重扫（保活壳门控：切走即停；归档视图/手动扫描中跳过）。
-  useEffect(() => {
-    if (!isActiveView) return
-    const t = window.setInterval(() => {
-      if (!runningRef.current && !archDay) pollRound(days)
-    }, 60_000)
-    return () => window.clearInterval(t)
-  }, [isActiveView, days, archDay])
-
-  // 新票光效/提示 8 秒后褪去
-  useEffect(() => {
-    if (!newKeys.size) return
-    const t = window.setTimeout(() => { setNewKeys(new Set()); setNewNote('') }, 8000)
-    return () => window.clearTimeout(t)
-  }, [newKeys])
+  }, [])
 
   // ---- 形态归档 ----
   const doArchive = () => {
@@ -198,13 +132,19 @@ export default function Screen() {
 
   const rowKey = (s: NPSetup) => s.symbol + s.keyDate
 
+  // 手动重扫（R 键/按钮/改窗口天数）：全局重扫并重置分页选择。
+  const rescan = (d: number) => {
+    scan(d)
+    setPage(1); setSel(-1); setExpanded(null)
+  }
+
   // j/k 行移动 · Enter 详情 · / 搜索 · r 重扫（输入框聚焦自动跳过）
   useKeyboardShortcuts({
     j: () => setSel(i => Math.min(pageItems.length - 1, i + 1)),
     k: () => setSel(i => Math.max(0, i - 1)),
     Enter: () => { const s = pageItems[sel]; if (s) openDetail(s) },
     '/': () => searchRef.current?.focus(),
-    r: () => { if (!running) run(days) },
+    r: () => { if (!running) rescan(days) },
   })
 
   useEffect(() => {
@@ -274,7 +214,7 @@ export default function Screen() {
   )
 
   const rowProps = (s: NPSetup, idx: number) => ({
-    className: `rowlink${sel === idx ? ' sel' : ''}${newKeys.has(sigKey(s)) ? ' screen-flash' : ''}`,
+    className: `rowlink${sel === idx ? ' sel' : ''}${flashKeys.has(sigKey(s)) ? ' screen-flash' : ''}`,
     title: '悬浮预览K线 · 点击查看形态详情',
     onClick: () => { setSel(idx); openDetail(s) },
     onMouseEnter: (e: ReactMouseEvent<HTMLTableRowElement>) =>
@@ -313,23 +253,21 @@ export default function Screen() {
             onChange={e => setDaysInput(e.target.value)}
             onKeyDown={(e: ReactKeyboardEvent) => {
               if (e.key === 'Enter' && !running) {
-                const d = Math.max(1, Number(daysInput) || 10)
-                setDays(d); run(d)
+                rescan(Math.max(1, Number(daysInput) || 10))
               }
             }}
             placeholder="10" spellCheck={false}
           />
-          <Button disabled={running} onClick={() => {
-            const d = Math.max(1, Number(daysInput) || 10)
-            setDays(d); run(d)
-          }}>{running ? '扫描中…' : `筛查近 ${Math.max(1, Number(daysInput) || 10)} 日`}</Button>
+          <Button disabled={running} onClick={() => rescan(Math.max(1, Number(daysInput) || 10))}>
+            {running ? '扫描中…' : `筛查近 ${Math.max(1, Number(daysInput) || 10)} 日`}
+          </Button>
         </div>
       </header>
 
       {env && <EnvBanner tone={env.tone} desc={env.desc} time={env.time} />}
 
       {error ? (
-        <ErrorBlock title="筛查失败" desc={error} onRetry={() => run(days)} />
+        <ErrorBlock title="筛查失败" desc={error} onRetry={() => scan(days)} />
       ) : !result ? (
         <Card className="skel-card"><div style={{ display: 'grid', gap: 14 }}><Skeleton w="30%" /><Skeleton w="100%" h={40} count={6} /></div></Card>
       ) : (
@@ -360,9 +298,9 @@ export default function Screen() {
           </FilterBar>
           <p className="stage-note">{meta.sub}</p>
 
-          {!archDay && newNote && (
+          {!archDay && freshNote && (
             <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 8 }}>
-              <span className="screen-newbar"><span className="dot" /><b>雷达</b>{newNote}</span>
+              <span className="screen-newbar"><span className="dot" /><b>雷达</b>{freshNote}</span>
             </div>
           )}
           {archNote && <div className="arch-note">{archNote}</div>}
