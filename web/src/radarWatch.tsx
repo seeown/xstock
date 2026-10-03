@@ -4,6 +4,7 @@ import { api, type ScreenResult, type NPSetup } from './api'
 import { fmt } from './components/ui'
 import { useView } from './shell'
 import { PetSpeaker, isAwake, queueSpeech, dingForPick } from './petSpeaker'
+import { showToast } from './toastService'
 
 // ─── 全局雷达监控：人在任何页面都不断线 ────────────────────────
 // 轮询挂在应用壳层（不随雷达页切走而停）：交易时段 60s 一轮，
@@ -12,7 +13,6 @@ import { PetSpeaker, isAwake, queueSpeech, dingForPick } from './petSpeaker'
 
 const POLL_MS = 60_000
 const FLASH_MS = 8_000
-const TOAST_MS = 9_000
 const TITLE_TICK_MS = 1_500
 const TITLE_MAX_MS = 10 * 60_000 // 闪烁最多 10 分钟，防永久打扰
 const TITLE_BASE = document.title
@@ -28,8 +28,6 @@ export function inRadarWindow(now = new Date()): boolean {
   const hm = now.getHours() * 100 + now.getMinutes()
   return hm >= 910 && hm <= 1510
 }
-
-interface RadarToast { id: number; text: string }
 
 interface RadarWatch {
   result: ScreenResult | null
@@ -58,11 +56,9 @@ export function RadarWatchProvider({ children }: { children: ReactNode }) {
   const [days, setDays] = useState(10)
   const [flashKeys, setFlashKeys] = useState<Set<string>>(new Set())
   const [freshNote, setFreshNote] = useState('')
-  const [toasts, setToasts] = useState<RadarToast[]>([])
 
   const baselineRef = useRef<Set<string> | null>(null)
   const busyRef = useRef(false)
-  const toastSeq = useRef(0)
   const daysRef = useRef(10)
   const viewRef = useRef(view)
   viewRef.current = view
@@ -96,9 +92,11 @@ export function RadarWatchProvider({ children }: { children: ReactNode }) {
     const names = fresh.slice(0, 3).map(f => f.name || f.symbol).join('、')
     setFreshNote(`本轮新增 ${fresh.length} 只${names ? `：${names}${fresh.length > 3 ? ' 等' : ''}` : ''}`)
     if (viewRef.current === 'screen') return
-    const id = ++toastSeq.current
-    setToasts(ts => [...ts.slice(-2), { id, text: `雷达新增 ${fresh.length} 只：${names}${fresh.length > 3 ? ' 等' : ''}` }])
-    window.setTimeout(() => setToasts(ts => ts.filter(t => t.id !== id)), TOAST_MS)
+    showToast({
+      text: `雷达新增 ${fresh.length} 只：${names}${fresh.length > 3 ? ' 等' : ''}`,
+      hint: '点击前往雷达页',
+      onClick: () => { stopTitleFlash(); switchTo('screen') },
+    })
     startTitleFlash(fresh.length)
   }
 
@@ -200,29 +198,10 @@ export function RadarWatchProvider({ children }: { children: ReactNode }) {
     return () => { delete w.__radarWatch }
   }, [pollRound])
 
-  const dismiss = (id: number) => setToasts(ts => ts.filter(t => t.id !== id))
-
   return (
     <Ctx.Provider value={{ result, running, error, days, flashKeys, freshNote, scan }}>
       {children}
       <PetSpeaker />
-      <div className="toast-stack" role="status" aria-live="polite">
-        {toasts.map(t => (
-          <button
-            key={t.id} className="toast static toast-radar"
-            onClick={() => { dismiss(t.id); stopTitleFlash(); switchTo('screen') }}
-          >
-            <svg className="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
-              <path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-              <path d="M13.7 21a2 2 0 01-3.4 0" />
-            </svg>
-            <span>
-              <span className="tt">{t.text}</span>
-              <span className="td">点击前往雷达页</span>
-            </span>
-          </button>
-        ))}
-      </div>
     </Ctx.Provider>
   )
 }

@@ -512,6 +512,9 @@ export interface PaperPosition {
   pnlPct: number
   dayPnl: number
   dayChgPct: number
+  /** 买入信号快照的战法价位（0=老单未存）：止损/止盈提醒锚点 */
+  stopLoss: number
+  target: number
 }
 
 export interface PaperEquityPoint {

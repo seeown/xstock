@@ -179,7 +179,8 @@ export default function Paper() {
                     <tr>
                       <th>股票</th><th className="num">持仓</th><th className="num">可卖</th>
                       <th className="num">成本价</th><th className="num">现价</th><th className="num">当日%</th>
-                      <th className="num">市值</th><th className="num">浮盈亏</th><th className="num">盈亏%</th><th className="num">今日盈亏</th><th></th>
+                      <th className="num">市值</th><th className="num">浮盈亏</th><th className="num">盈亏%</th><th className="num">今日盈亏</th>
+                      <th className="num">止损/目标</th><th></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -200,6 +201,23 @@ export default function Paper() {
                         <td className={`num ${signCls(p.pnl)}`}>{signedMoney(p.pnl)}</td>
                         <td className={`num ${signCls(p.pnl)}`}>{signed(p.pnlPct)}{p.pnlPct.toFixed(2)}%</td>
                         <td className={`num ${signCls(p.dayPnl)}`}>{signedMoney(p.dayPnl)}</td>
+                        <td className="num paper-stop-cell">
+                          {(() => {
+                            // 到价判定：锚定买入信号快照的战法价位（0=老单未存）
+                            const stopHit = p.stopLoss > 0 && p.lastPrice > 0 && p.lastPrice <= p.stopLoss
+                            const targetHit = p.target > 0 && p.lastPrice > 0 && p.lastPrice >= p.target
+                            if (!(p.stopLoss > 0 || p.target > 0)) return <span className="muted">—</span>
+                            return (
+                              <>
+                                <span className={stopHit ? 'down-text' : 'muted'} style={stopHit ? { fontWeight: 700 } : undefined}>{fmt(p.stopLoss)}</span>
+                                <span className="muted-c"> / </span>
+                                <span className={targetHit ? 'up-text' : 'muted'} style={targetHit ? { fontWeight: 700 } : undefined}>{fmt(p.target)}</span>
+                                {stopHit && <span className="paper-alert stop">触止损</span>}
+                                {targetHit && <span className="paper-alert target">达目标</span>}
+                              </>
+                            )
+                          })()}
+                        </td>
                         <td>
                           <Button
                             variant="mini" disabled={p.availQty < 100}

@@ -384,7 +384,7 @@ export default function Screen() {
                             <td className="num">{fmt(s.target)}</td>
                             <td>{s.chaseBan ? <span className="down-text">过线</span> : '—'}</td>
                             {quoteCell(s)}
-                            <td><PaperQuickBuy symbol={s.symbol} name={s.name} signal={{ stage: s.stage, keyDate: s.keyDate, asOf: s.asOf }} /></td>
+                            <td><PaperQuickBuy symbol={s.symbol} name={s.name} signal={{ stage: s.stage, keyDate: s.keyDate, asOf: s.asOf, stopLoss: s.stopLoss, target: s.target }} /></td>
                           </tr>
                           {expanded === rowKey(s) && <ExpandRow s={s} />}
                         </Fragment>
@@ -423,7 +423,7 @@ export default function Screen() {
                             <td className="num">{fmt(s.target)}</td>
                             <td>{s.chaseBan ? <span className="down-text">过线</span> : '—'}</td>
                             {quoteCell(s)}
-                            <td><PaperQuickBuy symbol={s.symbol} name={s.name} signal={{ stage: s.stage, keyDate: s.keyDate, asOf: s.asOf }} /></td>
+                            <td><PaperQuickBuy symbol={s.symbol} name={s.name} signal={{ stage: s.stage, keyDate: s.keyDate, asOf: s.asOf, stopLoss: s.stopLoss, target: s.target }} /></td>
                           </tr>
                           {expanded === rowKey(s) && <ExpandRow s={s} />}
                         </Fragment>
@@ -455,7 +455,7 @@ export default function Screen() {
                             <td className="num">{fmt(s.stopLoss)}</td>
                             <td className="num">{fmt(s.target)}</td>
                             {quoteCell(s)}
-                            <td><PaperQuickBuy symbol={s.symbol} name={s.name} signal={{ stage: s.stage, keyDate: s.keyDate, asOf: s.asOf }} /></td>
+                            <td><PaperQuickBuy symbol={s.symbol} name={s.name} signal={{ stage: s.stage, keyDate: s.keyDate, asOf: s.asOf, stopLoss: s.stopLoss, target: s.target }} /></td>
                           </tr>
                           {expanded === rowKey(s) && <ExpandRow s={s} />}
                         </Fragment>

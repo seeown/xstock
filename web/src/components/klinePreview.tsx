@@ -326,7 +326,13 @@ function PaperBuyBar({ state }: { state: KlineDetailState }) {
     api.paperOrder({
       symbol: state.symbol, name: state.name ?? '', side: 'buy', qty: q,
       note: note.trim() || undefined,
-      signal: state.setup ? { stage: state.setup.stage, keyDate: state.setup.keyDate, asOf: state.setup.asOf } : undefined,
+      signal: state.setup
+        ? {
+          stage: state.setup.stage, keyDate: state.setup.keyDate, asOf: state.setup.asOf,
+          // 快照战法价位：持仓的止损/止盈提醒锚定买入当时的信号，参数后续怎么改都不动
+          stopLoss: state.setup.stopLoss, target: state.setup.target,
+        }
+        : undefined,
       limit, limitPrice: limit ? lp : undefined,
     })
       .then(res => setResult('filled' in res

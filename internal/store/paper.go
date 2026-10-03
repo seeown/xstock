@@ -189,8 +189,12 @@ type PaperPosition struct {
 	Qty       int     `json:"qty"`      // 总持仓
 	AvailQty  int     `json:"availQty"` // T+1 可卖
 	CostPrice float64 `json:"costPrice"`
-	TodayQty  int     `json:"-"`          // 今日买入量（当日盈亏从成交价起算）
-	TodayCost float64 `json:"-"`          // 今日买入成本（含费用）
+	TodayQty  int     `json:"-"` // 今日买入量（当日盈亏从成交价起算）
+	TodayCost float64 `json:"-"` // 今日买入成本（含费用）
+	// 最早买入信号快照的战法价位（0=老单未存）：止损/止盈提醒的锚点，
+	// 参数后续怎么改都不动。
+	StopLoss float64 `json:"stopLoss"`
+	Target   float64 `json:"target"`
 }
 
 // PaperRawPositions 从流水推导持仓与可卖（不含现价）。today 为北京时间
@@ -213,8 +217,19 @@ func (s *Store) PaperRawPositions(ctx context.Context, acctID int64, today strin
 		       SUM(CASE WHEN side = 'buy' AND to_char(traded_at AT TIME ZONE 'Asia/Shanghai', 'YYYY-MM-DD') = $2
 		                THEN qty ELSE 0 END),
 		       SUM(CASE WHEN side = 'buy' AND to_char(traded_at AT TIME ZONE 'Asia/Shanghai', 'YYYY-MM-DD') = $2
-		                THEN amount + fee ELSE 0 END)
-		FROM paper_trades WHERE account_id = $1
+		                THEN amount + fee ELSE 0 END),
+		       COALESCE(MAX(sig_line.stop_loss), 0),
+		       COALESCE(MAX(sig_line.target), 0)
+		FROM paper_trades t
+		LEFT JOIN LATERAL (
+			SELECT (b.signal->>'stopLoss')::float8 AS stop_loss,
+			       (b.signal->>'target')::float8 AS target
+			FROM paper_trades b
+			WHERE b.account_id = t.account_id AND b.symbol = t.symbol AND b.side = 'buy'
+			  AND b.signal->>'stopLoss' IS NOT NULL
+			ORDER BY b.traded_at ASC LIMIT 1
+		) sig_line ON true
+		WHERE t.account_id = $1
 		GROUP BY symbol`, acctID, today)
 	if err != nil {
 		return nil, fmt.Errorf("derive paper positions: %w", err)
@@ -223,7 +238,7 @@ func (s *Store) PaperRawPositions(ctx context.Context, acctID int64, today strin
 	out := make([]PaperPosition, 0, 8)
 	for rows.Next() {
 		var p PaperPosition
-		if err := rows.Scan(&p.Symbol, &p.Name, &p.Qty, &p.AvailQty, &p.CostPrice, &p.TodayQty, &p.TodayCost); err != nil {
+		if err := rows.Scan(&p.Symbol, &p.Name, &p.Qty, &p.AvailQty, &p.CostPrice, &p.TodayQty, &p.TodayCost, &p.StopLoss, &p.Target); err != nil {
 			return nil, err
 		}
 		if p.Qty > 0 {

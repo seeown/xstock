@@ -144,6 +144,8 @@ func paperOverview(r *http.Request, s *store.Store, qc *quotes.Cache, ov *overla
 			"symbol": p.Symbol, "name": p.Name, "qty": p.Qty, "availQty": p.AvailQty,
 			"costPrice": round2f(p.CostPrice), "lastPrice": last, "marketValue": mv,
 			"pnl": pnl, "pnlPct": pnlPct, "dayPnl": dp, "dayChgPct": chgPct,
+			// 买入信号快照的战法价位（0=老单未存）：前端止损/止盈提醒的锚点
+			"stopLoss": round2f(p.StopLoss), "target": round2f(p.Target),
 		})
 	}
 	total := acct.Cash + marketValue
