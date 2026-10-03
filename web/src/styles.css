@@ -1431,6 +1431,12 @@ table.tb { width: 100%; border-collapse: collapse; font-size: 12.5px; }
   border-radius: 99px; padding: 1.5px 6px;
   box-shadow: 0 0 10px rgba(56, 189, 248, .5);
 }
+/* 弹窗日K的视角切换条：形态窗口（战法结构）↔ 完整K线（全量历史） */
+.kline-view-toggle {
+  display: flex; align-items: center; gap: 10px;
+  margin: 2px 2px 8px;
+}
+
 /* 播报气泡：近实底深空色 + 琥珀左边条（呼应牛角/天线的暖色） */
 .pet-bubble {
   max-width: 270px; padding: 9px 13px;

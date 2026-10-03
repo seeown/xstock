@@ -151,7 +151,8 @@ function ensureZtMark() {
 }
 
 // setupWindow 截取形态窗口：A 段末前 45 根到序列末尾，最多 150 根；
-// 无形态（个股页纯预览）时取最近 120 根。
+// 无形态（个股页纯预览）时取最近 120 根。完整 K 线模式不走这里——
+// 调用方直接传全量 bars。
 export function setupWindow(bars: Candle[], setup?: NPSetup): Candle[] {
   if (!bars.length) return bars
   const idx = setup ? bars.findIndex(b => b.date === setup.aEndDate) : -1
@@ -160,14 +161,20 @@ export function setupWindow(bars: Candle[], setup?: NPSetup): Candle[] {
   return bars.slice(Math.max(0, start))
 }
 
+// 完整 K 线模式的均线组与配色（对齐大盘/回测页 KlineChart）。
+const FULL_MA_PERIODS = [5, 10, 20, 30, 60, 250]
+const FULL_MA_COLORS = ['#2DD4BF', '#A5B4FC', '#38BDF8', '#FFC46B', '#A78BFA', '#94A3B8']
+
 export default function MiniKline({
-  bars, setup, buyDate, height = 280,
+  bars, setup, buyDate, height = 280, full = false,
 }: {
   bars: Candle[]
   setup?: NPSetup
   /** 买点日（归档形态的买点标记）：B1=企稳触发日，B2=突破日，B3=回踩确认日 */
   buyDate?: string
   height?: number
+  /** 完整 K 线：全量历史 + 六均线 + 默认 bar 宽（滚轮缩放/拖动回看），形态标注照画 */
+  full?: boolean
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
 
@@ -194,14 +201,16 @@ export default function MiniKline({
       indicator: {
         tooltip: { showRule: 'follow_cross' },
         bars: [{ style: 'fill', upColor: UP_COLOR, downColor: DOWN_COLOR }],
-        // 指标线全量配色：默认主题只带 5 色，VOL 均量线会轮到刺眼的蓝色。
-        lines: ['#935EBD', '#f5b544', '#22c58b', '#e8eef9', '#f4577a'].map(color => ({ style: 'solid', smooth: false, size: 1, color })),
+        // 指标线全量配色：默认主题只带 5 色，VOL 均量线会轮到刺眼的蓝色；
+        // 完整模式有 6 条均线，同样显式给足。
+        lines: (full ? FULL_MA_COLORS : ['#935EBD', '#f5b544', '#22c58b', '#e8eef9', '#f4577a'])
+          .map(color => ({ style: 'solid', smooth: false, size: 1, color })),
       },
     })
     chart.setDataLoader({ getBars: ({ callback }) => callback(data, false) })
     chart.setSymbol({ ticker: setup?.symbol ?? 'local', pricePrecision: 2, volumePrecision: 0 })
     chart.setPeriod({ type: 'day', span: 1 })
-    chart.createIndicator({ name: 'MA', calcParams: [20], paneId: 'candle_pane' }, false)
+    chart.createIndicator({ name: 'MA', calcParams: full ? FULL_MA_PERIODS : [20], paneId: 'candle_pane' }, false)
     chart.createIndicator('VOL')
 
     ensureZtLine()
@@ -276,14 +285,19 @@ export default function MiniKline({
       }
     }
 
-    // 适配窗口宽度：整段窗口撑满画布，右端对齐最新K线。
-    const width = el.clientWidth || 560
-    chart.setBarSpace(Math.min(18, Math.max(2, Math.round((width * 0.92) / bars.length))))
+    // 适配窗口宽度：形态窗口整段撑满画布、右端对齐最新；完整模式用
+    // 默认 bar 宽——几千根历史靠滚轮缩放/拖动回看（klinecharts 原生）。
+    if (full) {
+      chart.setBarSpace(9)
+    } else {
+      const width = el.clientWidth || 560
+      chart.setBarSpace(Math.min(18, Math.max(2, Math.round((width * 0.92) / bars.length))))
+    }
     chart.scrollToTimestamp(lastTs)
 
     return () => { dispose(el) }
-    // setup 字段变化即重建（同一弹窗内不会高频变化，重建成本低）。
-  }, [bars, setup, buyDate])
+    // setup/full 字段变化即重建（同一弹窗内不会高频变化，重建成本低）。
+  }, [bars, setup, buyDate, full])
 
   return <div ref={hostRef} style={{ width: '100%', height }} />
 }

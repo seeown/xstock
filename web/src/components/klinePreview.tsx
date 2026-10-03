@@ -185,6 +185,7 @@ export function KlineDetailModal({ state, onClose, onOpenBacktest }: {
   onOpenBacktest: (symbol: string) => void
 }) {
   const [kf, setKf] = useState<KfKey>('day')
+  const [fullView, setFullView] = useState(false)
   const [periodBars, setPeriodBars] = useState<Record<string, Candle[]>>({})
   const [minute, setMinute] = useState<IndexMinute | null>(null)
   const [periodLoading, setPeriodLoading] = useState(false)
@@ -193,9 +194,10 @@ export function KlineDetailModal({ state, onClose, onOpenBacktest }: {
   const sym = state?.symbol ?? ''
   const targetKey = state ? `${state.symbol}|${state.key ?? ''}` : ''
 
-  // 换目标票时回到日K并清掉上一票的非日线数据
+  // 换目标票时回到日K形态窗口并清掉上一票的非日线数据
   useEffect(() => {
     setKf('day')
+    setFullView(false)
     setMinute(null)
     setPeriodErr('')
   }, [targetKey])
@@ -263,11 +265,22 @@ export function KlineDetailModal({ state, onClose, onOpenBacktest }: {
           minute ? <IntradayChart data={minute} height={420} />
             : <div className="chart-empty">{periodLoading ? '正在拉取分时数据…' : periodErr || '暂无分时数据'}</div>
         ) : kf === 'day' ? (
-          state.bars === null
-            ? <Spinner text="加载K线…" />
-            : state.bars.length
-              ? <MiniKline bars={setupWindow(state.bars, s)} setup={s} buyDate={state.buyDate} height={420} />
-              : <div className="chart-empty">该股未同步日K · 可切换分时 / 周K / 月K / 年K 查看，或到档案抽屉点「同步日K」</div>
+          <>
+            <div className="kline-view-toggle">
+              <span className="range-tabs">
+                <button className={`range-tab${!fullView ? ' active' : ''}`} onClick={() => setFullView(false)}>形态窗口</button>
+                <button className={`range-tab${fullView ? ' active' : ''}`} onClick={() => setFullView(true)}>完整K线</button>
+              </span>
+              {fullView && <span className="muted-c" style={{ fontSize: 11 }}>全量历史 {state.bars?.length ?? 0} 根 · 滚轮缩放 · 拖动回看</span>}
+            </div>
+            {state.bars === null
+              ? <Spinner text="加载K线…" />
+              : state.bars.length
+                ? (fullView
+                    ? <MiniKline bars={state.bars} setup={s} buyDate={state.buyDate} height={420} full />
+                    : <MiniKline bars={setupWindow(state.bars, s)} setup={s} buyDate={state.buyDate} height={420} />)
+                : <div className="chart-empty">该股未同步日K · 可切换分时 / 周K / 月K / 年K 查看，或到档案抽屉点「同步日K」</div>}
+          </>
         ) : coarseBars ? (
           <MiniKline bars={coarseBars} height={420} />
         ) : (
