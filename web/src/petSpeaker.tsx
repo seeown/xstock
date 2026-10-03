@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 
 // ─── 语音宠物：雷达新票播报 ───────────────────────────────────
 // 红牛机器人蹲在右下角。默认睡觉——浏览器要求首次出声必须由
@@ -91,15 +92,33 @@ export function usePetState(): PetState {
   return state
 }
 
+// 点击蹲跳（squash & stretch）：蓄力压扁 → 腾起拉伸 → 落地压扁回弹。
+// 一次性 WAAPI 动画，无需 class/state，动画结束自动归位。
+function jumpOnce(el: HTMLElement) {
+  try {
+    el.animate([
+      { transform: 'translateY(0) scale(1, 1)', offset: 0 },
+      { transform: 'translateY(2px) scale(1.08, 0.88)', offset: 0.15 },
+      { transform: 'translateY(-18px) scale(0.96, 1.06)', offset: 0.45 },
+      { transform: 'translateY(0) scale(1.05, 0.92)', offset: 0.8 },
+      { transform: 'translateY(0) scale(1, 1)', offset: 1 },
+    ], { duration: 450, easing: 'ease-out' })
+  } catch { /* 动画只是反馈，失败无碍 */ }
+}
+
 // 右下角常驻形象：睡觉灰暗（Zzz），值班带 ON 徽标；说话时弹跳 + 气泡。
 export function PetSpeaker() {
   const pet = usePetState()
+  const toggle = (e: ReactMouseEvent<HTMLButtonElement>) => {
+    jumpOnce(e.currentTarget)
+    if (pet.asleep) wakePet(); else sleepPet()
+  }
   return (
     <div className="pet-dock">
       {pet.bubble && <div className="pet-bubble" aria-live="polite">{pet.bubble}</div>}
       <button
         className={`pet-avatar${pet.asleep ? ' asleep' : ''}${pet.speaking ? ' talk' : ''}`}
-        onClick={pet.asleep ? wakePet : sleepPet}
+        onClick={toggle}
         title={pet.asleep ? '点击唤醒：新票语音播报' : '点击休眠：暂停语音播报'}
         aria-label={pet.asleep ? '唤醒语音宠物' : '让语音宠物休眠'}
       >

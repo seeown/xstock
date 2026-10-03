@@ -40,44 +40,46 @@
 
   <!-- 腿 -->
   <g class="pd-dark">
-    <rect x="89" y="226" width="27" height="32" rx="13" fill="#5f6d85" stroke="rgba(255,255,255,0.30)" stroke-width="1.4"/>
-    <rect x="124" y="226" width="27" height="32" rx="13" fill="#5f6d85" stroke="rgba(255,255,255,0.30)" stroke-width="1.4"/>
+    <rect x="86" y="228" width="27" height="34" rx="13" fill="#5f6d85" stroke="rgba(255,255,255,0.30)" stroke-width="1.4"/>
+    <rect x="128" y="228" width="27" height="34" rx="13" fill="#5f6d85" stroke="rgba(255,255,255,0.30)" stroke-width="1.4"/>
   </g>
 
   <!-- 蹄套 -->
   <g class="pd-hoof">
-    <rect x="90" y="246" width="25" height="12" rx="6" fill="#7d88a0" stroke="rgba(255,255,255,0.30)" stroke-width="1.2"/>
-    <rect x="125" y="246" width="25" height="12" rx="6" fill="#7d88a0" stroke="rgba(255,255,255,0.30)" stroke-width="1.2"/>
+    <rect x="87" y="248" width="25" height="12" rx="6" fill="#7d88a0" stroke="rgba(255,255,255,0.30)" stroke-width="1.2"/>
+    <rect x="129" y="248" width="25" height="12" rx="6" fill="#7d88a0" stroke="rgba(255,255,255,0.30)" stroke-width="1.2"/>
   </g>
 
-  <!-- 身体（描边形成头身分界） -->
-  <rect class="pd-shell" x="78" y="182" width="84" height="52" rx="24" fill="#e5484d" stroke="#c23b41" stroke-width="1.6"/>
+  <!-- 身体（描边形成头身分界，加大圆肚） -->
+  <rect class="pd-shell" x="72" y="180" width="96" height="56" rx="27" fill="#e5484d" stroke="#c23b41" stroke-width="1.6"/>
 
   <!-- 肩关节 -->
   <g class="pd-dark">
-    <circle cx="79" cy="193" r="5" fill="#2e3542"/>
-    <circle cx="161" cy="193" r="5" fill="#2e3542"/>
+    <circle cx="74" cy="190" r="5" fill="#2e3542"/>
+    <circle cx="166" cy="190" r="5" fill="#2e3542"/>
   </g>
 
   <!-- 胸口面板 + 闪电 -->
-  <rect class="pd-dark" x="93" y="193" width="54" height="28" rx="14" fill="#2e3542"/>
-  <path class="pd-leaf" d="M 123 195.5 L 113.5 209 L 119 209 L 117 219.5 L 127.5 205.5 L 122 205.5 Z" fill="#f6efe3"/>
+  <rect class="pd-dark" x="91" y="193" width="58" height="30" rx="15" fill="#2e3542"/>
+  <path class="pd-leaf" d="M 124 195 L 112.5 210.5 L 119.5 210.5 L 116.5 221.5 L 129 205.5 L 122.5 205.5 Z" fill="#f6efe3"/>
 
   <!-- 头 -->
   <rect class="pd-shell" x="45" y="68" width="150" height="118" rx="46" fill="#e5484d"/>
 
   <!-- 眼窝 -->
   <g class="pd-dark">
-    <ellipse cx="88" cy="120" rx="9.5" ry="12" fill="#2e3542" transform="rotate(-8 88 120)"/>
-    <ellipse cx="152" cy="120" rx="9.5" ry="12" fill="#2e3542" transform="rotate(8 152 120)"/>
+    <ellipse cx="88" cy="117.5" rx="11.5" ry="14.5" fill="#2e3542" transform="rotate(-8 88 117.5)"/>
+    <ellipse cx="152" cy="117.5" rx="11.5" ry="14.5" fill="#2e3542" transform="rotate(8 152 117.5)"/>
   </g>
 
-  <!-- 眼睛 -->
+  <!-- 眼睛（放大 + 双层高光） -->
   <g class="pd-eye">
-    <circle class="pd-accent" cx="88" cy="121" r="6.2" fill="#ffb224"/>
-    <circle class="pd-accent" cx="152" cy="121" r="6.2" fill="#ffb224"/>
-    <circle cx="90" cy="118.5" r="1.9" fill="#ffffff" opacity="0.92"/>
-    <circle cx="154" cy="118.5" r="1.9" fill="#ffffff" opacity="0.92"/>
+    <circle class="pd-accent" cx="88" cy="117.5" r="8" fill="#ffb224"/>
+    <circle class="pd-accent" cx="152" cy="117.5" r="8" fill="#ffb224"/>
+    <circle cx="90" cy="114.3" r="2.4" fill="#ffffff" opacity="0.92"/>
+    <circle cx="154" cy="114.3" r="2.4" fill="#ffffff" opacity="0.92"/>
+    <circle cx="85.5" cy="120.5" r="1.1" fill="#ffffff" opacity="0.85"/>
+    <circle cx="149.5" cy="120.5" r="1.1" fill="#ffffff" opacity="0.85"/>
   </g>
 
   <!-- 口鼻 -->
