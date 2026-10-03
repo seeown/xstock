@@ -1,7 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api, type ScreenResult, type NPSetup } from './api'
+import { fmt } from './components/ui'
 import { useView } from './shell'
+import { PetSpeaker, isAwake, queueSpeech, dingForPick } from './petSpeaker'
 
 // ─── 全局雷达监控：人在任何页面都不断线 ────────────────────────
 // 轮询挂在应用壳层（不随雷达页切走而停）：交易时段 60s 一轮，
@@ -100,6 +102,30 @@ export function RadarWatchProvider({ children }: { children: ReactNode }) {
     startTitleFlash(fresh.length)
   }
 
+  // ---- 宠物播报（第四通道）：取现价后按阶段组文案，逐句入队 ----
+  // 与 toast 不同，语音不受"在雷达页"抑制——宠物是用户主动唤醒的。
+  const speakRadarPicks = async (fresh: NPSetup[]) => {
+    if (!isAwake()) return
+    dingForPick()
+    let priceOf = new Map<string, number>()
+    try {
+      const qs = await api.quotes([...new Set(fresh.map(f => f.symbol))])
+      priceOf = new Map(qs.filter(q => q.price > 0).map(q => [q.symbol, q.price]))
+    } catch { /* 行情暂缺：播报降级为无价版 */ }
+    for (const f of fresh.slice(0, 3)) {
+      const nm = f.name || f.symbol
+      const p = priceOf.get(f.symbol)
+      const seg = p != null ? `，现价 ${fmt(p)}` : ''
+      queueSpeech(
+        f.stage === 'b1' ? `${nm}${seg}，回调进入黄金区，符合 B1 低吸买点`
+          : f.stage === 'b2' ? `${nm}${seg}，放量突破颈线，B2 买点`
+            : f.stage === 'b3' ? `${nm}${seg}，回踩颈线缩量企稳，B3 买点`
+              : `${nm}${seg}，出现新信号`,
+      )
+    }
+    if (fresh.length > 3) queueSpeech(`另有 ${fresh.length - 3} 只新信号`)
+  }
+
   // ---- 轮询轮：diff 基线出新票；失败静默（下一轮再试）----
   const pollRound = useCallback(async () => {
     if (busyRef.current) return
@@ -115,6 +141,7 @@ export function RadarWatchProvider({ children }: { children: ReactNode }) {
         if (fresh.length) {
           setFlashKeys(new Set(fresh.map(sigKey)))
           notify(fresh)
+          void speakRadarPicks(fresh)
         } else {
           setFlashKeys(new Set())
         }
@@ -178,6 +205,7 @@ export function RadarWatchProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={{ result, running, error, days, flashKeys, freshNote, scan }}>
       {children}
+      <PetSpeaker />
       <div className="toast-stack" role="status" aria-live="polite">
         {toasts.map(t => (
           <button

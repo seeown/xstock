@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="262" viewBox="0 0 240 262" role="img" aria-label="红牛机器人吉祥物，配深色界面">
+  <title>红牛机器人 · 完整形象</title>
+  <defs>
+    <radialGradient id="pdGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffb224" stop-opacity="0.5"/>
+      <stop offset="70%" stop-color="#ffb224" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#ffb224" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- 天线 -->
+  <circle class="pd-antenna-glow" cx="120" cy="40" r="15" fill="url(#pdGlow)"/>
+  <path d="M120 66 V47" stroke="#9aa3b2" stroke-width="4.2" stroke-linecap="round" fill="none"/>
+  <rect class="pd-dark" x="114.5" y="64" width="11" height="9" rx="4.5" fill="#2e3542"/>
+  <circle class="pd-accent" cx="120" cy="40" r="6.5" fill="#ffb224"/>
+
+  <!-- 牛角（粗短外展） -->
+  <g class="pd-horn">
+    <path d="M 86 72 Q 56 66 44 38" stroke="#e8d5a0" stroke-width="12" stroke-linecap="round" fill="none"/>
+    <path d="M 154 72 Q 184 66 196 38" stroke="#e8d5a0" stroke-width="12" stroke-linecap="round" fill="none"/>
+  </g>
+
+  <!-- 耳朵（外下倾，带内耳） -->
+  <g class="pd-dark">
+    <ellipse cx="43" cy="101" rx="20" ry="13" fill="#5f6d85" stroke="rgba(255,255,255,0.30)" stroke-width="1.4" transform="rotate(-34 43 101)"/>
+    <ellipse cx="197" cy="101" rx="20" ry="13" fill="#5f6d85" stroke="rgba(255,255,255,0.30)" stroke-width="1.4" transform="rotate(34 197 101)"/>
+    <ellipse cx="45" cy="103" rx="10" ry="5.5" fill="#7d88a0" transform="rotate(-34 45 103)"/>
+    <ellipse cx="195" cy="103" rx="10" ry="5.5" fill="#7d88a0" transform="rotate(34 195 103)"/>
+  </g>
+
+  <!-- 手臂（藏于身体后） -->
+  <g class="pd-dark">
+    <rect x="64" y="186" width="19" height="44" rx="9.5" fill="#5f6d85" stroke="rgba(255,255,255,0.30)" stroke-width="1.4" transform="rotate(22 73 194)"/>
+    <rect x="157" y="186" width="19" height="44" rx="9.5" fill="#5f6d85" stroke="rgba(255,255,255,0.30)" stroke-width="1.4" transform="rotate(-22 167 194)"/>
+  </g>
+
+  <!-- 尾巴（细干 + 单瓣水滴毛穗） -->
+  <path class="pd-dark" d="M 158 224 Q 188 230 190 240" stroke="#5f6d85" stroke-width="7" stroke-linecap="round" fill="none"/>
+  <path class="pd-dark" d="M 190 239 Q 200 248 198 259 Q 194.5 265 187.5 261 Q 182.5 250 190 239 Z" fill="#5f6d85" stroke="rgba(255,255,255,0.30)" stroke-width="1.2"/>
+
+  <!-- 腿 -->
+  <g class="pd-dark">
+    <rect x="89" y="226" width="27" height="32" rx="13" fill="#5f6d85" stroke="rgba(255,255,255,0.30)" stroke-width="1.4"/>
+    <rect x="124" y="226" width="27" height="32" rx="13" fill="#5f6d85" stroke="rgba(255,255,255,0.30)" stroke-width="1.4"/>
+  </g>
+
+  <!-- 蹄套 -->
+  <g class="pd-hoof">
+    <rect x="90" y="246" width="25" height="12" rx="6" fill="#7d88a0" stroke="rgba(255,255,255,0.30)" stroke-width="1.2"/>
+    <rect x="125" y="246" width="25" height="12" rx="6" fill="#7d88a0" stroke="rgba(255,255,255,0.30)" stroke-width="1.2"/>
+  </g>
+
+  <!-- 身体（描边形成头身分界） -->
+  <rect class="pd-shell" x="78" y="182" width="84" height="52" rx="24" fill="#e5484d" stroke="#c23b41" stroke-width="1.6"/>
+
+  <!-- 肩关节 -->
+  <g class="pd-dark">
+    <circle cx="79" cy="193" r="5" fill="#2e3542"/>
+    <circle cx="161" cy="193" r="5" fill="#2e3542"/>
+  </g>
+
+  <!-- 胸口面板 + 闪电 -->
+  <rect class="pd-dark" x="93" y="193" width="54" height="28" rx="14" fill="#2e3542"/>
+  <path class="pd-leaf" d="M 123 195.5 L 113.5 209 L 119 209 L 117 219.5 L 127.5 205.5 L 122 205.5 Z" fill="#f6efe3"/>
+
+  <!-- 头 -->
+  <rect class="pd-shell" x="45" y="68" width="150" height="118" rx="46" fill="#e5484d"/>
+
+  <!-- 眼窝 -->
+  <g class="pd-dark">
+    <ellipse cx="88" cy="120" rx="9.5" ry="12" fill="#2e3542" transform="rotate(-8 88 120)"/>
+    <ellipse cx="152" cy="120" rx="9.5" ry="12" fill="#2e3542" transform="rotate(8 152 120)"/>
+  </g>
+
+  <!-- 眼睛 -->
+  <g class="pd-eye">
+    <circle class="pd-accent" cx="88" cy="121" r="6.2" fill="#ffb224"/>
+    <circle class="pd-accent" cx="152" cy="121" r="6.2" fill="#ffb224"/>
+    <circle cx="90" cy="118.5" r="1.9" fill="#ffffff" opacity="0.92"/>
+    <circle cx="154" cy="118.5" r="1.9" fill="#ffffff" opacity="0.92"/>
+  </g>
+
+  <!-- 口鼻 -->
+  <rect class="pd-shell" x="88" y="138" width="64" height="44" rx="22" fill="#f6efe3"/>
+
+  <!-- 鼻孔与嘴 -->
+  <g class="pd-dark">
+    <ellipse cx="107" cy="158" rx="4.5" ry="3.5" fill="#2e3542"/>
+    <ellipse cx="133" cy="158" rx="4.5" ry="3.5" fill="#2e3542"/>
+  </g>
+  <path class="pd-mouth" d="M 111 168.5 Q 120 174.5 129 168.5" stroke="#6b7280" stroke-width="3" stroke-linecap="round" fill="none"/>
+</svg>
